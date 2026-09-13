@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Zero Server-Side Transcode Self-Hosted Media Streaming Platform",
   "private": true,
+  "type": "module",
   "scripts": {
     "setup:samples": "node scripts/setup-sample-media.js",
     "client:install": "cd client && npm install",

@@ -32,5 +32,5 @@ export const config = {
   CACHE_DIR: path.resolve(process.cwd(), '.cache'),
   ALLOWED_VIDEO_EXTENSIONS: ['.mkv', '.mp4', '.webm', '.m4v', '.mov', '.avi', '.ts'],
   ALLOWED_SUBTITLE_EXTENSIONS: ['.ass', '.ssa', '.srt', '.vtt'],
-  ALLOWED_POSTER_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp'],
+  ALLOWED_POSTER_EXTENSIONS: ['.jpg', '.jpeg', '.png', '.webp', '.svg'],
 };

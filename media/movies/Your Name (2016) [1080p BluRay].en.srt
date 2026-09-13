@@ -1,11 +1,11 @@
 1
-0:00:01,000 --> 0:00:05,000
+0:00:00,500 --> 0:00:03,500
 StreamVault: Zero Server-Side Transcode Media Player
 
 2
-0:00:05,500 --> 0:00:10,000
+0:00:04,000 --> 0:00:07,000
 100% Client-Side Playback with HTTP 206 Byte-Range Streaming
 
 3
-0:00:10,500 --> 0:00:16,000
-Instant seeking without waiting for server transcoding!
+0:00:07,500 --> 0:00:09,800
+Instant seeking with zero server CPU overhead!
