@@ -7,7 +7,19 @@ import mime from 'mime-types';
 import { config } from './config.js';
 import { scanMediaLibrary } from './scanner.js';
 import { handleByteRangeStream, resolveSafePath } from './streamer.js';
-import { checkFfmpegAvailable, extractEmbeddedSubtitle } from './subtitles.js';
+import {
+  checkFfmpegAvailable,
+  extractEmbeddedSubtitle,
+  findCompanionSubtitles,
+  probeEmbeddedSubtitles,
+} from './subtitles.js';
+import {
+  loadLibraries,
+  addLibrary,
+  deleteLibrary,
+  getLibraryById,
+} from './libraries.js';
+import { browseFolder } from './explorer.js';
 
 const app = Fastify({
   logger: {
@@ -18,7 +30,7 @@ const app = Fastify({
 // Enable CORS for client-side fetches and canvas subtitle rendering
 await app.register(cors, {
   origin: true,
-  methods: ['GET', 'HEAD', 'OPTIONS'],
+  methods: ['GET', 'POST', 'DELETE', 'HEAD', 'OPTIONS'],
   allowedHeaders: ['Range', 'Content-Type', 'Accept'],
   exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type'],
 });
@@ -45,7 +57,7 @@ app.get('/api/health', async () => {
   return {
     status: 'online',
     appName: 'stream-vault',
-    version: '1.0.0',
+    version: '1.1.0',
     philosophy: 'Zero Server-Side Transcode, 100% Client-Side Playback',
     serverCpuUsage: '0% Transcode Load (Pure Origin Range Streaming)',
     memory: {
@@ -78,12 +90,98 @@ app.post('/api/media/scan', async () => {
   };
 });
 
-// 4. HTTP Range Video Streaming (Zero Server-Side Transcoding)
+// 4. Libraries Management API
+app.get('/api/libraries', async () => {
+  return loadLibraries();
+});
+
+app.post('/api/libraries', async (req, reply) => {
+  const { name, path: libPath, type } = req.body || {};
+  if (!name || !libPath) {
+    return reply.status(400).send({ error: 'Library name and directory path are required' });
+  }
+
+  try {
+    const newLib = addLibrary({ name, path: libPath, type });
+    // Invalidate cached media scan
+    cachedLibrary = null;
+    return newLib;
+  } catch (err) {
+    return reply.status(400).send({ error: err.message });
+  }
+});
+
+app.delete('/api/libraries/:id', async (req, reply) => {
+  const { id } = req.params;
+  const deleted = deleteLibrary(id);
+  if (!deleted) {
+    return reply.status(404).send({ error: 'Library not found' });
+  }
+  cachedLibrary = null;
+  return { success: true };
+});
+
+// 5. Hierarchical Folder Explorer API (View by Folder)
+app.get('/api/browse', async (req, reply) => {
+  const libraryId = req.query.libraryId;
+  const subpath = req.query.subpath || '';
+
+  let libraryRoot = config.MEDIA_ROOT;
+  let libraryMeta = null;
+
+  if (libraryId) {
+    libraryMeta = getLibraryById(libraryId);
+    if (libraryMeta && fs.existsSync(libraryMeta.path)) {
+      libraryRoot = libraryMeta.path;
+    }
+  }
+
+  try {
+    const result = browseFolder(libraryRoot, subpath);
+    return {
+      library: libraryMeta || { id: 'default', name: 'Media Root', path: libraryRoot },
+      ...result,
+    };
+  } catch (err) {
+    return reply.status(400).send({ error: err.message });
+  }
+});
+
+// 6. HTTP Range Video Streaming (Zero Server-Side Transcoding)
 app.get('/api/stream', async (req, reply) => {
   return handleByteRangeStream(req, reply);
 });
 
-// 5. Subtitles Serving (.ass, .ssa, .srt, .vtt)
+// 7. Subtitles Tracks Probe (External Companion + MKV Softsubs)
+app.get('/api/subtitles/tracks', async (req, reply) => {
+  const queryPath = req.query.path;
+  if (!queryPath) {
+    return reply.status(400).send({ error: 'Missing path query parameter' });
+  }
+
+  let fullPath;
+  try {
+    fullPath = resolveSafePath(queryPath);
+  } catch (err) {
+    return reply.status(403).send({ error: err.message });
+  }
+
+  if (!fs.existsSync(fullPath)) {
+    return reply.status(404).send({ error: 'Video file not found' });
+  }
+
+  const companionSubs = findCompanionSubtitles(fullPath);
+  const embeddedSubs = await probeEmbeddedSubtitles(fullPath);
+
+  const combined = [...companionSubs, ...embeddedSubs];
+  if (combined.length > 0 && !combined.some((s) => s.isDefault)) {
+    combined[0].isDefault = true;
+  }
+
+  return combined;
+});
+
+// 8. Subtitles Serving (.ass, .ssa, .srt, .vtt)
 app.get('/api/subtitles', async (req, reply) => {
   const subPath = req.query.path;
   if (!subPath) {
@@ -116,7 +214,7 @@ app.get('/api/subtitles', async (req, reply) => {
   return fs.createReadStream(fullPath);
 });
 
-// 6. Extract embedded MKV subtitle track (Instant text dump, 0% video transcode)
+// 9. Extract embedded MKV subtitle track (Instant text dump, 0% video transcode)
 app.get('/api/subtitles/extract', async (req, reply) => {
   const videoPath = req.query.path;
   const trackIndex = parseInt(req.query.track || '0', 10);
@@ -142,7 +240,7 @@ app.get('/api/subtitles/extract', async (req, reply) => {
   }
 });
 
-// 7. Poster / Artwork Serving
+// 10. Poster / Artwork Serving
 app.get('/api/poster', async (req, reply) => {
   const posterPath = req.query.path;
   if (!posterPath) {
@@ -166,7 +264,7 @@ app.get('/api/poster', async (req, reply) => {
   return fs.createReadStream(fullPath);
 });
 
-// 8. Serve Frontend Static Build if present (Production / Docker build)
+// 11. Serve Frontend Static Build if present (Production / Docker build)
 const clientDistPath = path.resolve(process.cwd(), '../client/dist');
 const localClientDist = path.resolve(process.cwd(), 'client/dist');
 const resolvedDist = fs.existsSync(clientDistPath) ? clientDistPath : (fs.existsSync(localClientDist) ? localClientDist : null);
@@ -198,7 +296,6 @@ if (resolvedDist) {
 // Start Server
 async function start() {
   try {
-    // Ensure cache directory exists
     if (!fs.existsSync(config.CACHE_DIR)) {
       fs.mkdirSync(config.CACHE_DIR, { recursive: true });
     }

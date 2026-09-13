@@ -1,133 +1,185 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Sparkles,
+  Film,
+  Tv,
+  Folder,
+  FolderTree,
+  FolderPlus,
+  Trash2,
+  HardDrive,
+  Layers,
+  Clock,
+  Loader2,
+  AlertCircle,
+  Play,
+  Check,
+} from 'lucide-react';
 import Navbar from './components/Navbar';
-import VideoPlayer from './components/VideoPlayer';
-import ContinueWatching from './components/ContinueWatching';
 import MediaGrid from './components/MediaGrid';
+import VideoPlayer from './components/VideoPlayer';
 import SeriesModal from './components/SeriesModal';
-import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
+import ContinueWatching from './components/ContinueWatching';
 import StatsModal from './components/StatsModal';
-import { fetchMediaLibrary, triggerMediaScan, fetchServerHealth } from './utils/api';
-import { getWatchHistory, removeWatchHistory } from './utils/storage';
-import { Zap, AlertTriangle } from 'lucide-react';
+import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
+import AddLibraryModal from './components/AddLibraryModal';
+import FolderExplorer from './components/FolderExplorer';
+import {
+  fetchMediaLibrary,
+  fetchServerHealth,
+  triggerMediaScan,
+  fetchLibraries,
+  removeLibrary,
+} from './utils/api';
+import { getWatchHistory } from './utils/storage';
 
 export default function App() {
-  const [mediaData, setMediaData] = useState({ items: [], series: [], categories: [] });
+  const [libraryData, setLibraryData] = useState({ items: [], series: [] });
+  const [libraries, setLibraries] = useState([]);
   const [serverHealth, setServerHealth] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState('');
+  // App Navigation & View Modes
+  const [activeTab, setActiveTab] = useState('catalog'); // 'catalog' | 'explorer'
+  const [activeLibrary, setActiveLibrary] = useState(null);
+  const [displayMode, setDisplayMode] = useState(() => {
+    return localStorage.getItem('sv_display_mode') || 'grid';
+  });
+
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Active modal / player states
-  const [nowPlaying, setNowPlaying] = useState(null);
-  const [seriesModalItem, setSeriesModalItem] = useState(null);
-  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  // Modals & Player State
+  const [currentVideo, setCurrentVideo] = useState(null);
+  const [activeSeriesModal, setActiveSeriesModal] = useState(null);
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showAddLibraryModal, setShowAddLibraryModal] = useState(false);
+  const [watchHistory, setWatchHistory] = useState([]);
 
-  // Watch history
-  const [historyItems, setHistoryItems] = useState([]);
+  const handleDisplayModeChange = (mode) => {
+    setDisplayMode(mode);
+    localStorage.setItem('sv_display_mode', mode);
+  };
 
-  // Load history from localStorage
-  const reloadHistory = useCallback(() => {
-    const hist = getWatchHistory();
-    const sorted = Object.values(hist)
-      .filter((h) => !h.completed && h.currentTime > 5)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 8);
-    setHistoryItems(sorted);
-  }, []);
-
-  // Fetch initial library data
-  const loadLibrary = useCallback(async (isManualRefresh = false) => {
+  // Load libraries and initial media catalog
+  const loadData = useCallback(async (force = false) => {
     try {
-      if (isManualRefresh) setIsRefreshing(true);
       setError(null);
-
-      const [library, health] = await Promise.all([
-        fetchMediaLibrary(isManualRefresh),
-        fetchServerHealth(),
+      const [mediaRes, healthRes, libsRes] = await Promise.all([
+        fetchMediaLibrary(force),
+        fetchServerHealth().catch(() => null),
+        fetchLibraries().catch(() => []),
       ]);
 
-      setMediaData(library);
-      setServerHealth(health);
-      reloadHistory();
+      setLibraryData(mediaRes);
+      setServerHealth(healthRes);
+      setLibraries(libsRes);
+      setWatchHistory(getWatchHistory());
     } catch (err) {
-      console.error('Error loading StreamVault library:', err);
-      setError(err.message);
+      console.error('Failed to load StreamVault data:', err);
+      setError(err.message || 'Gagal memuat data dari server');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [reloadHistory]);
+  }, []);
 
   useEffect(() => {
-    loadLibrary();
-  }, [loadLibrary]);
+    loadData();
+  }, [loadData]);
 
-  // Handle manual rescan
+  // Periodic health check
+  useEffect(() => {
+    const timer = setInterval(() => {
+      fetchServerHealth()
+        .then((res) => setServerHealth(res))
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
+
   const handleRefresh = async () => {
+    setIsRefreshing(true);
     try {
-      setIsRefreshing(true);
       await triggerMediaScan();
-      await loadLibrary(true);
-    } catch (err) {
-      console.error('Failed to trigger media scan:', err);
-    } finally {
+      await loadData(true);
+    } catch {
       setIsRefreshing(false);
     }
   };
 
-  // Episode navigation within a series or list
-  const currentSeries = nowPlaying?.showName
-    ? mediaData.series.find(
-        (s) => s.title.toLowerCase() === nowPlaying.showName.toLowerCase()
-      )
-    : null;
-
-  const currentEpisodeList = currentSeries ? currentSeries.episodes : mediaData.items;
-  const currentIndex = nowPlaying
-    ? currentEpisodeList.findIndex((ep) => ep.id === nowPlaying.id)
-    : -1;
-
-  const hasNextEpisode = currentIndex >= 0 && currentIndex < currentEpisodeList.length - 1;
-  const hasPrevEpisode = currentIndex > 0;
-
-  const handleNextEpisode = () => {
-    if (hasNextEpisode) {
-      setNowPlaying(currentEpisodeList[currentIndex + 1]);
+  const handleDeleteLibrary = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Hapus library ini dari StreamVault? (File fisik di harddisk TIDAK akan terhapus)')) {
+      return;
+    }
+    try {
+      await removeLibrary(id);
+      setLibraries((prev) => prev.filter((l) => l.id !== id));
+      if (activeLibrary?.id === id) {
+        setActiveLibrary(null);
+      }
+    } catch (err) {
+      alert(err.message || 'Gagal menghapus library');
     }
   };
 
-  const handlePrevEpisode = () => {
-    if (hasPrevEpisode) {
-      setNowPlaying(currentEpisodeList[currentIndex - 1]);
+  // Episode navigation helpers
+  const getEpisodeNavigation = () => {
+    if (!currentVideo) return { next: null, prev: null, episodes: [] };
+
+    // If current video belongs to a series
+    const foundSeries = libraryData.series.find((s) =>
+      s.episodes.some((ep) => ep.id === currentVideo.id)
+    );
+
+    if (foundSeries) {
+      const idx = foundSeries.episodes.findIndex((ep) => ep.id === currentVideo.id);
+      return {
+        next: idx >= 0 && idx < foundSeries.episodes.length - 1 ? foundSeries.episodes[idx + 1] : null,
+        prev: idx > 0 ? foundSeries.episodes[idx - 1] : null,
+        episodes: foundSeries.episodes,
+      };
     }
+
+    return { next: null, prev: null, episodes: [] };
   };
 
-  // Play item handler
-  const handlePlayMedia = (item) => {
-    setNowPlaying(item);
-    setSeriesModalItem(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  const nav = getEpisodeNavigation();
 
-  // Remove history item
-  const handleRemoveHistory = (id) => {
-    removeWatchHistory(id);
-    reloadHistory();
-  };
+  // Fullscreen video player view
+  if (currentVideo) {
+    return (
+      <VideoPlayer
+        mediaItem={currentVideo}
+        onBack={() => {
+          setCurrentVideo(null);
+          setWatchHistory(getWatchHistory());
+        }}
+        onNextEpisode={() => nav.next && setCurrentVideo(nav.next)}
+        onPrevEpisode={() => nav.prev && setCurrentVideo(nav.prev)}
+        hasNextEpisode={Boolean(nav.next)}
+        hasPrevEpisode={Boolean(nav.prev)}
+        seriesEpisodes={nav.episodes}
+        onSelectEpisode={(ep) => setCurrentVideo(ep)}
+      />
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-vault-950 text-slate-100 flex flex-col font-sans selection:bg-vault-accent selection:text-white">
-      {/* Top Navigation */}
+    <div className="min-h-screen bg-vault-950 text-slate-100 flex flex-col antialiased selection:bg-vault-accent selection:text-white">
+      {/* Top Sticky Navbar */}
       <Navbar
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         selectedCategory={selectedCategory}
         setSelectedCategory={setSelectedCategory}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenAddLibrary={() => setShowAddLibraryModal(true)}
         serverHealth={serverHealth}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
@@ -135,126 +187,194 @@ export default function App() {
         onOpenStats={() => setShowStatsModal(true)}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1">
-        {nowPlaying ? (
-          /* Active Full Player View */
-          <VideoPlayer
-            mediaItem={nowPlaying}
-            onBack={() => {
-              setNowPlaying(null);
-              reloadHistory();
-            }}
-            onNextEpisode={handleNextEpisode}
-            onPrevEpisode={handlePrevEpisode}
-            hasNextEpisode={hasNextEpisode}
-            hasPrevEpisode={hasPrevEpisode}
-            seriesEpisodes={currentEpisodeList}
-            onSelectEpisode={(ep) => setNowPlaying(ep)}
-          />
-        ) : (
-          /* Library Browser View */
-          <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
-            {/* Error banner if server unreachable */}
-            {error && (
-              <div className="mb-6 p-4 rounded-2xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-400" />
-                  <span>Connection Notice: {error}</span>
-                </div>
-                <button
-                  onClick={() => loadLibrary()}
-                  className="px-3 py-1 bg-rose-800 hover:bg-rose-700 text-white rounded-lg font-semibold"
-                >
-                  Retry
-                </button>
-              </div>
-            )}
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-8">
+        {/* Loading Spinner */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-28 text-center">
+            <Loader2 className="w-12 h-12 text-vault-accent animate-spin mb-4" />
+            <p className="text-sm font-semibold text-slate-300">Menghubungkan ke origin range server...</p>
+            <p className="text-xs text-slate-500 mt-1">Zero Transcode Architecture • CPU 0%</p>
+          </div>
+        )}
 
-            {/* Zero-Transcode Hero Pill Banner */}
-            <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-vault-900 via-vault-850 to-vault-900 border border-vault-800/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg shadow-black/20">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-vault-accent/15 border border-vault-accent/30 flex items-center justify-center shrink-0">
-                  <Zap className="w-5 h-5 text-vault-accent" />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
-                    Zero Server Transcoding &bull; 100% Client-Side Playback
-                  </h2>
-                  <p className="text-xs text-slate-400">
-                    Byte-range origin delivery &bull; Hardware GPU decoding &bull; Stylized ASS subtitles rendered via WebAssembly canvas
-                  </p>
-                </div>
-              </div>
+        {/* Error Alert */}
+        {error && !loading && (
+          <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/25 rounded-2xl text-red-400 text-sm">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <div className="flex-1">{error}</div>
+            <button
+              onClick={() => loadData(true)}
+              className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-xs font-semibold"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        )}
 
-              <div className="flex items-center gap-3 text-xs">
-                <div className="px-3 py-1.5 rounded-xl bg-vault-950 border border-vault-800 text-slate-300 font-mono">
-                  <span className="text-emerald-400 font-bold">0%</span> CPU Spikes
-                </div>
-                <div className="px-3 py-1.5 rounded-xl bg-vault-950 border border-vault-800 text-slate-300 font-mono">
-                  <span className="text-cyan-400 font-bold">RFC 7233</span> 206 Partial
-                </div>
-              </div>
-            </div>
-
+        {/* ================= TAB 1: CATALOG VIEW ================= */}
+        {!loading && !error && activeTab === 'catalog' && (
+          <>
             {/* Continue Watching Section */}
-            {!searchQuery && historyItems.length > 0 && (
+            {watchHistory.length > 0 && !searchQuery && selectedCategory === 'all' && (
               <ContinueWatching
-                historyItems={historyItems}
-                onResume={(item) => {
-                  // Find full item from mediaData
-                  const fullItem = mediaData.items.find((m) => m.id === item.id) || item;
-                  handlePlayMedia(fullItem);
-                }}
-                onRemove={handleRemoveHistory}
+                historyItems={watchHistory}
+                onPlayMedia={(item) => setCurrentVideo(item)}
+                onClearHistory={() => setWatchHistory([])}
               />
             )}
 
-            {/* Media Grid Section */}
-            {loading ? (
-              <div className="py-20 flex flex-col items-center justify-center gap-3">
-                <div className="w-8 h-8 border-3 border-vault-accent border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs font-medium text-slate-400">Scanning media library...</span>
+            {/* Media Grid with Multi-Mode Explorer (Grid / Compact / Details) */}
+            <MediaGrid
+              items={libraryData.items}
+              series={libraryData.series}
+              selectedCategory={selectedCategory}
+              searchQuery={searchQuery}
+              displayMode={displayMode}
+              onDisplayModeChange={handleDisplayModeChange}
+              onPlayMedia={(item) => setCurrentVideo(item)}
+              onViewSeries={(series) => setActiveSeriesModal(series)}
+            />
+          </>
+        )}
+
+        {/* ================= TAB 2: FOLDER EXPLORER VIEW ================= */}
+        {!loading && !error && activeTab === 'explorer' && (
+          <div>
+            {!activeLibrary ? (
+              /* Library Selection Overview */
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-vault-800">
+                  <div>
+                    <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                      <FolderTree className="w-5 h-5 text-amber-400" />
+                      <span>Pilih Library Homelab</span>
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Jelajahi file per-folder ala Jellyfin & Windows Explorer
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddLibraryModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-vault-accent hover:bg-vault-accent-hover text-white rounded-xl text-xs font-bold shadow-lg shadow-vault-accent/20 transition"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                    <span>Tambah Library Baru</span>
+                  </button>
+                </div>
+
+                {/* Libraries Card Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {libraries.map((lib) => {
+                    const isAnime = lib.type === 'anime';
+                    const isMovie = lib.type === 'movies';
+                    const isTv = lib.type === 'tv';
+
+                    return (
+                      <div
+                        key={lib.id}
+                        onClick={() => setActiveLibrary(lib)}
+                        className="group relative flex flex-col p-5 bg-vault-900/90 hover:bg-vault-850 border border-vault-800 hover:border-vault-accent/60 rounded-2xl cursor-pointer transition-all hover:scale-[1.01] shadow-lg"
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="w-12 h-12 rounded-xl bg-vault-800/80 border border-vault-700 flex items-center justify-center text-vault-accent group-hover:scale-110 transition-transform">
+                            {isAnime ? (
+                              <Sparkles className="w-6 h-6 text-amber-400" />
+                            ) : isMovie ? (
+                              <Film className="w-6 h-6 text-rose-400" />
+                            ) : isTv ? (
+                              <Tv className="w-6 h-6 text-cyan-400" />
+                            ) : (
+                              <HardDrive className="w-6 h-6 text-vault-accent" />
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-vault-950 text-slate-400 border border-vault-800">
+                              {lib.type}
+                            </span>
+                            {/* Allow deleting custom libraries */}
+                            {!['anime', 'movies', 'tv', 'default'].includes(lib.id) && (
+                              <button
+                                onClick={(e) => handleDeleteLibrary(lib.id, e)}
+                                className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-vault-950 transition"
+                                title="Hapus Library"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <h3 className="text-base font-bold text-white group-hover:text-vault-accent transition mb-1">
+                          {lib.name}
+                        </h3>
+
+                        <p className="text-xs font-mono text-slate-400 bg-vault-950 px-2.5 py-1.5 rounded-lg border border-vault-800/80 truncate mb-4">
+                          {lib.path}
+                        </p>
+
+                        <div className="mt-auto flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-vault-800/60">
+                          <span className="flex items-center gap-1 text-vault-accent font-semibold group-hover:translate-x-1 transition-transform">
+                            <span>Buka Folder</span>
+                            <span>&rarr;</span>
+                          </span>
+                          <span className="text-[11px] text-slate-500">Zero Transcode</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
-              <MediaGrid
-                items={mediaData.items}
-                series={mediaData.series}
-                selectedCategory={selectedCategory}
-                searchQuery={searchQuery}
-                onPlayMedia={handlePlayMedia}
-                onViewSeries={(series) => setSeriesModalItem(series)}
+              /* Active Folder Explorer for Selected Library */
+              <FolderExplorer
+                library={activeLibrary}
+                onSelectVideo={(video) => setCurrentVideo(video)}
+                onBackToLibraries={() => setActiveLibrary(null)}
               />
             )}
           </div>
         )}
       </main>
 
-      {/* Series Detail Modal */}
-      {seriesModalItem && (
+      {/* Series Episodes Drawer/Modal */}
+      {activeSeriesModal && (
         <SeriesModal
-          series={seriesModalItem}
-          onClose={() => setSeriesModalItem(null)}
-          onPlayEpisode={handlePlayMedia}
-        />
-      )}
-
-      {/* Keyboard Shortcuts Modal */}
-      {showShortcutsModal && (
-        <KeyboardShortcutsModal onClose={() => setShowShortcutsModal(false)} />
-      )}
-
-      {/* Stats & Architecture Modal */}
-      {showStatsModal && (
-        <StatsModal
-          serverHealth={serverHealth}
-          mediaStats={{
-            totalFiles: mediaData.items.length,
-            totalSeries: mediaData.series.length,
+          series={activeSeriesModal}
+          isOpen={Boolean(activeSeriesModal)}
+          onClose={() => setActiveSeriesModal(null)}
+          onPlayEpisode={(ep) => {
+            setCurrentVideo(ep);
+            setActiveSeriesModal(null);
           }}
-          onClose={() => setShowStatsModal(false)}
         />
       )}
+
+      {/* Add Library Modal */}
+      <AddLibraryModal
+        isOpen={showAddLibraryModal}
+        onClose={() => setShowAddLibraryModal(false)}
+        onCreated={(newLib) => {
+          setLibraries((prev) => [...prev, newLib]);
+          setActiveTab('explorer');
+          setActiveLibrary(newLib);
+        }}
+      />
+
+      {/* Architecture & Performance Stats Modal */}
+      <StatsModal
+        isOpen={showStatsModal}
+        onClose={() => setShowStatsModal(false)}
+        serverHealth={serverHealth}
+      />
+
+      {/* Keyboard Shortcuts Cheat Sheet Modal */}
+      <KeyboardShortcutsModal
+        isOpen={showShortcutsModal}
+        onClose={() => setShowShortcutsModal(false)}
+      />
     </div>
   );
 }

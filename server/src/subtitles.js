@@ -6,8 +6,7 @@ import { config } from './config.js';
 
 const execAsync = promisify(exec);
 
-// Language code detector for subtitle filenames
-const LANG_MAP = {
+const LANGUAGE_MAP = {
   id: 'Indonesian',
   ind: 'Indonesian',
   indo: 'Indonesian',
@@ -15,133 +14,160 @@ const LANG_MAP = {
   eng: 'English',
   ja: 'Japanese',
   jpn: 'Japanese',
-  jp: 'Japanese',
   es: 'Spanish',
   spa: 'Spanish',
   fr: 'French',
   fra: 'French',
   de: 'German',
   ger: 'German',
-  zh: 'Chinese',
-  chi: 'Chinese',
-  ko: 'Korean',
-  kor: 'Korean',
-  ar: 'Arabic',
-  ara: 'Arabic',
-  ru: 'Russian',
-  rus: 'Russian',
+  it: 'Italian',
+  ita: 'Italian',
   pt: 'Portuguese',
   por: 'Portuguese',
+  ru: 'Russian',
+  rus: 'Russian',
+  ko: 'Korean',
+  kor: 'Korean',
+  zh: 'Chinese',
+  chi: 'Chinese',
+  zho: 'Chinese',
+  ara: 'Arabic',
 };
 
 /**
- * Parses language code and label from subtitle filename
+ * Extract human language label from subtitle filename or tag
  */
-export function detectSubtitleLanguage(subFilename, videoBasename = '') {
-  let nameWithoutExt = subFilename.replace(/\.(ass|ssa|srt|vtt)$/i, '');
-  if (videoBasename && nameWithoutExt.startsWith(videoBasename)) {
-    nameWithoutExt = nameWithoutExt.slice(videoBasename.length);
-  }
+export function parseLanguageCode(str) {
+  if (!str) return 'Default';
+  const lower = str.toLowerCase();
 
-  const clean = nameWithoutExt.toLowerCase().replace(/[^a-z0-9]/g, ' ').trim();
-  const tokens = clean.split(/\s+/);
-
-  for (const token of tokens) {
-    if (LANG_MAP[token]) {
-      return { lang: token, label: LANG_MAP[token] };
+  for (const [code, label] of Object.entries(LANGUAGE_MAP)) {
+    const boundaryRegex = new RegExp(`(^|[^a-z0-9])${code}([^a-z0-9]|$)`, 'i');
+    if (boundaryRegex.test(lower)) {
+      return label;
     }
   }
 
-  // Regex patterns for e.g. .en.ass or _ind.ass or [Eng]
-  const match = nameWithoutExt.match(/(?:[._\-\[\(])([a-z]{2,4})(?:[\]\)]|$)/i);
-  if (match && LANG_MAP[match[1].toLowerCase()]) {
-    const code = match[1].toLowerCase();
-    return { lang: code, label: LANG_MAP[code] };
-  }
-
-  return { lang: 'und', label: 'Default / External' };
+  return 'Unknown';
 }
 
 /**
- * Finds external companion subtitle files for a given video file
+ * Find external companion subtitle files matching video basename
  */
-export function findExternalSubtitles(videoFullPath, videoRelPath) {
+export function findCompanionSubtitles(videoFullPath) {
   const dir = path.dirname(videoFullPath);
-  const ext = path.extname(videoFullPath);
-  const baseName = path.basename(videoFullPath, ext);
+  const videoExt = path.extname(videoFullPath);
+  const videoBase = path.basename(videoFullPath, videoExt);
 
+  if (!fs.existsSync(dir)) return [];
+
+  const files = fs.readdirSync(dir);
   const subtitles = [];
 
-  try {
-    if (!fs.existsSync(dir)) return subtitles;
-    const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const ext = path.extname(file).toLowerCase();
+    if (!config.ALLOWED_SUBTITLE_EXTENSIONS.includes(ext)) continue;
 
-    for (const file of files) {
-      const fileExt = path.extname(file).toLowerCase();
-      if (!config.ALLOWED_SUBTITLE_EXTENSIONS.includes(fileExt)) continue;
+    // Match files that start with same base name
+    if (file.startsWith(videoBase)) {
+      const subFullPath = path.join(dir, file);
+      const subSuffix = file.slice(videoBase.length, -ext.length);
+      const lang = parseLanguageCode(subSuffix) || 'Default';
+      const format = ext.replace('.', '').toUpperCase();
 
-      // Check if file starts with the same base name or matches
-      const subBase = path.basename(file, fileExt);
-      if (subBase === baseName || subBase.startsWith(baseName)) {
-        const { lang, label } = detectSubtitleLanguage(file, baseName);
-        const subRelPath = path.posix.join(path.dirname(videoRelPath), file);
+      const relPath = path.relative(config.MEDIA_ROOT, subFullPath);
+      const encodedPath = encodeURIComponent(relPath);
 
-        subtitles.push({
-          label: `${label} (${fileExt.replace('.', '').toUpperCase()})`,
-          lang,
-          format: fileExt.replace('.', '').toLowerCase(),
-          filename: file,
-          url: `/api/subtitles?path=${encodeURIComponent(subRelPath)}`,
-          isDefault: subtitles.length === 0,
-        });
-      }
+      subtitles.push({
+        label: `${lang} (${format}) - External`,
+        lang: lang.toLowerCase().slice(0, 2),
+        format: format.toLowerCase(),
+        filename: file,
+        url: `/api/subtitles?path=${encodedPath}`,
+        isEmbedded: false,
+        isDefault: subtitles.length === 0,
+      });
     }
-  } catch (err) {
-    console.error('Error finding subtitles for', videoFullPath, err);
   }
 
   return subtitles;
 }
 
+// Backward compatibility alias for scanner.js
+export const findExternalSubtitles = findCompanionSubtitles;
+
 /**
- * Checks whether ffmpeg is available for subtitle-only extraction
+ * Check if ffmpeg/ffprobe is installed on host/container
  */
-let isFfmpegAvailableCached = null;
 export async function checkFfmpegAvailable() {
-  if (isFfmpegAvailableCached !== null) return isFfmpegAvailableCached;
   try {
     await execAsync('ffmpeg -version');
-    isFfmpegAvailableCached = true;
+    return true;
   } catch {
-    isFfmpegAvailableCached = false;
+    return false;
   }
-  return isFfmpegAvailableCached;
 }
 
 /**
- * Extract embedded subtitle from MKV (zero transcode: purely text stream dump)
+ * Probe embedded subtitle tracks inside MKV/MP4 containers via ffprobe or ffmpeg
  */
-export async function extractEmbeddedSubtitle(videoFullPath, streamIndex = 0) {
+export async function probeEmbeddedSubtitles(videoFullPath) {
   const hasFfmpeg = await checkFfmpegAvailable();
-  if (!hasFfmpeg) {
-    throw new Error('FFmpeg not installed on host for embedded subtitle extraction.');
+  if (!hasFfmpeg) return [];
+
+  try {
+    // ffprobe json inspection for subtitle streams
+    const { stdout } = await execAsync(
+      `ffprobe -v error -select_streams s -show_entries stream=index,codec_name:stream_tags=language,title -of json "${videoFullPath}"`
+    );
+    const data = JSON.parse(stdout);
+    if (!data.streams || !Array.isArray(data.streams)) return [];
+
+    const relPath = path.relative(config.MEDIA_ROOT, videoFullPath);
+    const encodedPath = encodeURIComponent(relPath);
+
+    return data.streams.map((stream, idx) => {
+      const streamIndex = stream.index;
+      const langTag = stream.tags?.language || '';
+      const titleTag = stream.tags?.title || '';
+      const lang = parseLanguageCode(langTag) || 'Track ' + (idx + 1);
+      const format = (stream.codec_name || 'ass').toLowerCase();
+      const label = titleTag
+        ? `${titleTag} [Softsub ${format.toUpperCase()}]`
+        : `${lang} [Softsub ${format.toUpperCase()}] (Track ${idx + 1})`;
+
+      return {
+        label,
+        lang: lang.toLowerCase().slice(0, 2),
+        format,
+        trackIndex: streamIndex,
+        isEmbedded: true,
+        url: `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}`,
+        isDefault: false,
+      };
+    });
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * Extract embedded subtitle stream using raw copy (-c:s copy)
+ */
+export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
+  const hashName = Buffer.from(videoFullPath + trackIndex).toString('hex').slice(0, 24);
+  const cacheFile = path.join(config.CACHE_DIR, 'subtitles', `${hashName}.ass`);
+
+  if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 0) {
+    return cacheFile;
   }
 
-  const stat = fs.statSync(videoFullPath);
-  const cacheKey = `${path.basename(videoFullPath)}_${stat.size}_${stat.mtimeMs}_s${streamIndex}.ass`;
-  const cacheSubDir = path.join(config.CACHE_DIR, 'subtitles');
-  
-  if (!fs.existsSync(cacheSubDir)) {
-    fs.mkdirSync(cacheSubDir, { recursive: true });
+  const subCacheDir = path.join(config.CACHE_DIR, 'subtitles');
+  if (!fs.existsSync(subCacheDir)) {
+    fs.mkdirSync(subCacheDir, { recursive: true });
   }
 
-  const outPath = path.join(cacheSubDir, cacheKey);
-  if (fs.existsSync(outPath)) {
-    return outPath;
-  }
-
-  // Pure text stream copy (-c:s copy), takes <50ms with 0% CPU overhead
-  const cmd = `ffmpeg -nostdin -loglevel error -y -i "${videoFullPath}" -map 0:s:${streamIndex} -c:s copy "${outPath}"`;
+  const cmd = `ffmpeg -y -i "${videoFullPath}" -map 0:${trackIndex} -c:s copy "${cacheFile}"`;
   await execAsync(cmd);
-  return outPath;
+  return cacheFile;
 }

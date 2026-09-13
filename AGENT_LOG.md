@@ -31,3 +31,11 @@ This log tracks multi-agent concurrency locks and task execution states for `str
 - **2026-09-13T16:00:43Z** | Agent: Antigravity | Status: `[COMPLETED]` - Push commits to remote origin (`https://github.com/srytmj/stream-vault`)
   - Successfully pushed `main` branch to upstream repository
   - Working tree clean, all features and demo files synchronized
+
+- **2026-09-13T16:22:49Z** | Agent: Antigravity | Status: `[COMPLETED]` - Custom libraries, hierarchical folder view, file explorer modes, and softsub discovery
+  - Built custom dynamic library manager (`server/src/libraries.js`) with persistent JSON storage and CRUD APIs (`/api/libraries`)
+  - Implemented hierarchical folder explorer (`server/src/explorer.js`) with interactive breadcrumbs and recursive directory traversal (`/api/browse`)
+  - Built front-end Folder Explorer component (`FolderExplorer.jsx`) and Add Library modal (`AddLibraryModal.jsx`)
+  - Added multi-mode File Explorer display switcher: Poster Grid (Large), Compact Icons (Medium), and Details Table with file size, modified date, format, and subtitle badges
+  - Implemented embedded MKV/MP4 softsub probe and extraction (`subtitles.js`)
+  - Added "Direct Play: Original (Hardware Accelerated)" quality and zero-transcode badge to player controls

@@ -14,9 +14,12 @@ import {
   Sparkles,
   Layers,
   ChevronRight,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 import { getSavedProgress, saveWatchProgress } from '../utils/storage';
 import { formatDuration } from '../utils/formatters';
+import { fetchSubtitleTracks } from '../utils/api';
 
 export default function VideoPlayer({
   mediaItem,
@@ -38,19 +41,35 @@ export default function VideoPlayer({
   const [jassubStatus, setJassubStatus] = useState('ready');
   const [showSubModal, setShowSubModal] = useState(false);
   const [showEpisodeDrawer, setShowEpisodeDrawer] = useState(false);
+  const [videoResolution, setVideoResolution] = useState('Original (Direct Play)');
 
-  // Initialize subtitle list from media item
+  // Initialize and discover subtitle tracks (both external companion & embedded softsub)
   useEffect(() => {
     if (!mediaItem) return;
 
-    const subs = mediaItem.subtitles || [];
-    setAvailableSubtitles(subs);
+    const initialSubs = mediaItem.subtitles || [];
+    setAvailableSubtitles(initialSubs);
 
     // Default select first ASS or SRT subtitle if available
-    if (subs.length > 0) {
-      setActiveSubtitle(subs[0]);
+    if (initialSubs.length > 0) {
+      setActiveSubtitle(initialSubs[0]);
     } else {
       setActiveSubtitle(null);
+    }
+
+    // Probe server for embedded softsub tracks in MKV/MP4
+    const itemPath = mediaItem.relativePath || mediaItem.subpath || mediaItem.filename;
+    if (itemPath) {
+      fetchSubtitleTracks(itemPath)
+        .then((tracks) => {
+          if (Array.isArray(tracks) && tracks.length > 0) {
+            setAvailableSubtitles(tracks);
+            // If nothing was selected or default found, select
+            const def = tracks.find((t) => t.isDefault) || tracks[0];
+            if (def) setActiveSubtitle(def);
+          }
+        })
+        .catch(() => {});
     }
   }, [mediaItem]);
 
@@ -109,7 +128,7 @@ export default function VideoPlayer({
       url: mediaItem.streamUrl,
       title: mediaItem.title,
       type: mediaItem.extension?.replace('.', '') || 'mp4',
-      theme: '#f47521', // Crunchyroll flame orange
+      theme: '#f47521', // Flame orange
       autoplay: true,
       autoMini: true,
       playbackRate: true,
@@ -134,10 +153,16 @@ export default function VideoPlayer({
       },
       controls: [
         {
+          name: 'quality-badge',
+          position: 'right',
+          html: '<span style="font-size: 11px; font-weight: bold; background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 6px; border-radius: 4px;">DIRECT PLAY</span>',
+          tooltip: 'Zero Transcode: 100% Original Quality Direct Stream',
+        },
+        {
           name: 'subtitles-btn',
           position: 'right',
           html: `<span style="font-weight: bold; font-size: 13px; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px;">CC</span>`,
-          tooltip: 'Subtitles / ASS Renderer',
+          tooltip: 'Subtitles & ASS Softsubs',
           click: () => {
             setShowSubModal(true);
           },
@@ -149,7 +174,6 @@ export default function VideoPlayer({
 
     // Fast keyboard shortcuts handling
     const handleKeyDown = (e) => {
-      // Don't trigger if user is typing in an input
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
 
       const video = art.video;
@@ -222,9 +246,19 @@ export default function VideoPlayer({
         });
       }
 
+      if (art.video?.videoWidth && art.video?.videoHeight) {
+        setVideoResolution(`${art.video.videoWidth}x${art.video.videoHeight} Original`);
+      }
+
       // If initial subtitle exists, setup JASSUB
       if (activeSubtitle) {
         setupJassub(art.video, activeSubtitle.url);
+      }
+    });
+
+    art.on('video:loadedmetadata', () => {
+      if (art.video?.videoWidth && art.video?.videoHeight) {
+        setVideoResolution(`${art.video.videoWidth}x${art.video.videoHeight} Original`);
       }
     });
 
@@ -255,330 +289,271 @@ export default function VideoPlayer({
         art.destroy(false);
       }
     };
-  }, [mediaItem?.id]); // re-run only when media ID changes
+  }, [mediaItem?.id, mediaItem?.streamUrl]);
 
-  // Update JASSUB when activeSubtitle changes
-  const handleSelectSubtitle = (sub) => {
-    setActiveSubtitle(sub);
-    setShowSubModal(false);
-
-    if (!artRef.current || !artRef.current.video) return;
-
-    if (!sub) {
+  // Update subtitle when activeSubtitle changes
+  useEffect(() => {
+    if (artRef.current && artRef.current.video && activeSubtitle) {
+      setupJassub(artRef.current.video, activeSubtitle.url);
+    } else if (!activeSubtitle) {
       destroyJassub();
-      setJassubStatus('off');
-      artRef.current.notice.show = 'Subtitles Off';
-    } else {
-      setupJassub(artRef.current.video, sub.url);
-      artRef.current.notice.show = `Subtitles: ${sub.label}`;
     }
-  };
+  }, [activeSubtitle, setupJassub, destroyJassub]);
 
-  // Custom subtitle file upload (.ass, .srt)
-  const handleCustomSubtitleUpload = (e) => {
+  // Handle local subtitle file upload (.ass / .srt / .vtt)
+  const handleLocalSubUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const objectUrl = URL.createObjectURL(file);
+    const subUrl = URL.createObjectURL(file);
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'ass';
     const customSub = {
-      label: `Custom: ${file.name}`,
-      lang: 'custom',
-      format: file.name.endsWith('.ass') ? 'ass' : 'srt',
+      label: `${file.name} (Local)`,
+      lang: 'local',
+      format: ext,
       filename: file.name,
-      url: objectUrl,
+      url: subUrl,
       isCustom: true,
     };
 
     setAvailableSubtitles((prev) => [customSub, ...prev]);
-    handleSelectSubtitle(customSub);
-  };
+    setActiveSubtitle(customSub);
+    setShowSubModal(false);
 
-  const restartFromBeginning = () => {
     if (artRef.current) {
-      artRef.current.seek = 0;
-      setResumeToast(null);
-      artRef.current.notice.show = 'Restarted from beginning';
+      artRef.current.notice.show = `Loaded subtitle: ${file.name}`;
     }
   };
 
   return (
-    <div className="relative flex flex-col bg-vault-950 min-h-[calc(100vh-65px)]">
-      {/* Top action bar */}
-      <div className="flex items-center justify-between px-4 lg:px-8 py-3 bg-vault-900/60 border-b border-vault-800">
+    <div className="flex flex-col h-screen bg-black text-white relative select-none">
+      {/* Top Header Controls */}
+      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-auto">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-vault-800 hover:bg-vault-700 text-slate-200 text-xs font-medium transition-all"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-vault-900/80 hover:bg-vault-800 border border-white/10 text-slate-200 hover:text-white transition backdrop-blur-md text-xs font-semibold"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Library</span>
+            <span>Kembali</span>
           </button>
 
-          <div>
-            <h1 className="text-sm md:text-base font-bold text-white tracking-tight line-clamp-1">
+          <div className="flex flex-col">
+            <h1 className="text-sm font-bold text-white tracking-tight line-clamp-1 max-w-md">
               {mediaItem.title}
             </h1>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <span className="text-vault-accent font-semibold uppercase">{mediaItem.category}</span>
-              <span>•</span>
-              <span>{mediaItem.extension?.toUpperCase()}</span>
-              <span>•</span>
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <span className="font-mono text-vault-accent">{mediaItem.extension?.toUpperCase()}</span>
+              <span>&bull;</span>
               <span>{mediaItem.sizeFormatted}</span>
-              <span>•</span>
-              <span className="text-emerald-400 font-medium">Direct Range Stream</span>
+              {activeSubtitle && (
+                <>
+                  <span>&bull;</span>
+                  <span className="text-amber-400 font-medium">
+                    CC: {activeSubtitle.label}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right action controls */}
+        {/* Quality & Episode Drawer Toggle */}
         <div className="flex items-center gap-2">
-          {hasPrevEpisode && (
-            <button
-              onClick={onPrevEpisode}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-vault-850 hover:bg-vault-800 text-slate-200 text-xs font-medium transition-all border border-vault-700"
-              title="Previous Episode (P)"
-            >
-              <SkipBack className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Prev</span>
-            </button>
-          )}
+          {/* Quality Indicator Badge */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+            <Zap className="w-3.5 h-3.5" />
+            <span>{videoResolution}</span>
+            <span className="text-[10px] text-emerald-300 font-normal">(CPU 0%)</span>
+          </div>
 
-          {hasNextEpisode && (
-            <button
-              onClick={onNextEpisode}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-vault-accent hover:bg-vault-accentHover text-white text-xs font-medium transition-all shadow-md shadow-vault-accent/20"
-              title="Next Episode (N)"
-            >
-              <span className="hidden sm:inline">Next</span>
-              <SkipForward className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          {seriesEpisodes.length > 1 && (
+          {seriesEpisodes.length > 0 && (
             <button
               onClick={() => setShowEpisodeDrawer((prev) => !prev)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-vault-850 hover:bg-vault-800 text-slate-200 text-xs font-medium transition-all border border-vault-700"
-              title="View all episodes"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-vault-900/80 hover:bg-vault-800 border border-white/10 text-slate-200 hover:text-white transition backdrop-blur-md text-xs font-semibold"
             >
-              <Layers className="w-3.5 h-3.5 text-vault-accent" />
-              <span className="hidden sm:inline">Episodes ({seriesEpisodes.length})</span>
+              <Layers className="w-4 h-4 text-cyan-400" />
+              <span>Episodes ({seriesEpisodes.length})</span>
             </button>
           )}
+
+          <button
+            onClick={() => setShowSubModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-vault-900/80 hover:bg-vault-800 border border-white/10 text-slate-200 hover:text-white transition backdrop-blur-md text-xs font-semibold"
+          >
+            <Subtitles className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">Subtitles</span>
+          </button>
         </div>
       </div>
 
-      {/* Main player layout */}
-      <div className="relative flex-1 flex flex-col lg:flex-row">
-        {/* Player Container */}
-        <div className="flex-1 flex flex-col items-center justify-center bg-black/60 p-2 sm:p-4 lg:p-6">
-          <div className="relative w-full max-w-6xl aspect-video bg-black rounded-xl overflow-hidden shadow-2xl border border-vault-800">
-            <div ref={containerRef} className="w-full h-full" />
+      {/* Video Container (Hardware Accelerated Player + JASSUB Canvas) */}
+      <div className="flex-1 w-full h-full relative overflow-hidden bg-black flex items-center justify-center">
+        <div ref={containerRef} className="w-full h-full" />
 
-            {/* Resume Playback Toast */}
-            {resumeToast && (
-              <div className="absolute top-4 left-4 z-30 flex items-center gap-3 bg-vault-900/95 border border-vault-700 backdrop-blur-md px-4 py-2.5 rounded-xl shadow-xl animate-fade-in text-xs text-white">
-                <Sparkles className="w-4 h-4 text-vault-accent animate-pulse" />
-                <span>{resumeToast.message}</span>
-                <button
-                  onClick={restartFromBeginning}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-vault-800 hover:bg-vault-700 text-vault-accent font-semibold transition-colors"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Restart</span>
-                </button>
-                <button
-                  onClick={() => setResumeToast(null)}
-                  className="text-slate-400 hover:text-white ml-1 text-sm font-bold"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {/* Subtitle status badge overlay */}
-            <div className="absolute top-4 right-4 z-20 pointer-events-none flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm border border-white/10 text-[11px]">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  activeSubtitle ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
-                }`}
-              />
-              <span className="text-slate-300 font-medium">
-                {activeSubtitle ? `ASS Canvas: ${activeSubtitle.label}` : 'Subtitles: Off'}
-              </span>
-            </div>
-          </div>
-
-          {/* Quick Player Bar Info */}
-          <div className="w-full max-w-6xl mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-400 bg-vault-900/40 p-3 rounded-xl border border-vault-800/60">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-slate-200">Hardware Acceleration:</span>
-              <span className="text-emerald-400 font-medium">Active (Client Decoded)</span>
-              <span className="text-slate-600">|</span>
-              <span className="font-semibold text-slate-200">Server CPU:</span>
-              <span className="text-emerald-400 font-medium">0% (Pure Range Server)</span>
-              <span className="text-slate-600">|</span>
-              <span className="font-semibold text-slate-200">Subtitle Engine:</span>
-              <span className="text-amber-400 font-medium">JASSUB WebAssembly (libass)</span>
-            </div>
-
+        {/* Resume Toast Banner */}
+        {resumeToast && (
+          <div className="absolute bottom-20 left-6 z-30 flex items-center gap-3 p-3.5 bg-vault-900/95 border border-vault-700 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+            <span className="text-xs text-slate-200">{resumeToast.message}</span>
             <button
-              onClick={() => setShowSubModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-vault-850 hover:bg-vault-800 text-slate-200 font-medium border border-vault-700 transition-all"
+              onClick={() => {
+                if (artRef.current) {
+                  artRef.current.seek = 0;
+                  setResumeToast(null);
+                }
+              }}
+              className="flex items-center gap-1 text-xs font-bold text-vault-accent hover:text-vault-accent-hover px-2 py-1 bg-vault-800 rounded-lg transition"
             >
-              <Subtitles className="w-3.5 h-3.5 text-vault-accent" />
-              <span>Configure Subtitles</span>
+              <RotateCcw className="w-3 h-3" />
+              Restart 0:00
             </button>
-          </div>
-        </div>
-
-        {/* Optional Episode Drawer for Series */}
-        {showEpisodeDrawer && seriesEpisodes.length > 0 && (
-          <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-vault-800 bg-vault-900/70 p-4 overflow-y-auto max-h-[500px] lg:max-h-none">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-sm text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-vault-accent" />
-                Episodes ({seriesEpisodes.length})
-              </h3>
-              <button
-                onClick={() => setShowEpisodeDrawer(false)}
-                className="text-xs text-slate-400 hover:text-white"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              {seriesEpisodes.map((ep, idx) => {
-                const isCurrent = ep.id === mediaItem.id;
-                return (
-                  <button
-                    key={ep.id}
-                    onClick={() => {
-                      onSelectEpisode(ep);
-                      setShowEpisodeDrawer(false);
-                    }}
-                    className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 ${
-                      isCurrent
-                        ? 'bg-vault-accent/15 border-vault-accent/50 text-white font-semibold'
-                        : 'bg-vault-850/60 border-vault-800/80 text-slate-300 hover:bg-vault-800 hover:border-vault-700'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-xs font-mono text-slate-500 w-5">
-                        {ep.episode !== null ? ep.episode : idx + 1}
-                      </span>
-                      <span className="text-xs truncate">{ep.title}</span>
-                    </div>
-                    {isCurrent && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-vault-accent text-white font-bold shrink-0">
-                        PLAYING
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              onClick={() => setResumeToast(null)}
+              className="text-slate-400 hover:text-white text-xs ml-1"
+            >
+              ✕
+            </button>
           </div>
         )}
       </div>
 
-      {/* Subtitles & Styling Modal */}
+      {/* Subtitles & Softsubs Selection Modal */}
       {showSubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-          <div className="bg-vault-900 border border-vault-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-vault-800">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-vault-900 border border-vault-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-vault-800 bg-vault-950/60">
               <div className="flex items-center gap-2">
-                <Subtitles className="w-5 h-5 text-vault-accent" />
-                <h3 className="font-bold text-base text-white">Client-Side Subtitles (ASS/SRT)</h3>
+                <Subtitles className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-base text-white">Pilih Subtitle & Softsub</h3>
               </div>
               <button
                 onClick={() => setShowSubModal(false)}
-                className="text-slate-400 hover:text-white text-lg font-bold"
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-vault-800"
               >
                 ✕
               </button>
             </div>
 
-            <div className="py-4 space-y-4">
-              <p className="text-xs text-slate-400 leading-relaxed">
-                StreamVault renders anime styled <span className="text-amber-400 font-semibold">.ass</span> subtitles
-                directly on your browser canvas using WebAssembly libass (JASSUB), with full typesetting, karaoke, and custom fonts.
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <p className="text-xs text-slate-400">
+                Subtitle di-render langsung di HTML5 canvas via <span className="text-vault-accent font-semibold">JASSUB WebAssembly</span> tanpa transcode server.
               </p>
 
-              {/* Subtitle list */}
+              {/* Subtitle Track List */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-300">Available Tracks</label>
+                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Track Subtitle Tersedia
+                </label>
 
                 {/* Off Option */}
                 <button
-                  onClick={() => handleSelectSubtitle(null)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                  onClick={() => {
+                    setActiveSubtitle(null);
+                    setShowSubModal(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-medium transition ${
                     activeSubtitle === null
-                      ? 'bg-vault-accent text-white border-vault-accent font-semibold'
-                      : 'bg-vault-850 text-slate-300 border-vault-800 hover:bg-vault-800'
+                      ? 'bg-vault-accent/20 border-vault-accent text-vault-accent'
+                      : 'bg-vault-950 border-vault-800 text-slate-300 hover:border-vault-700'
                   }`}
                 >
-                  <span>Disable Subtitles</span>
+                  <span>Nonaktifkan Subtitle (Off)</span>
                   {activeSubtitle === null && <Check className="w-4 h-4" />}
                 </button>
 
-                {/* Detected Tracks */}
-                {availableSubtitles.map((sub, i) => {
-                  const isSelected = activeSubtitle?.url === sub.url;
+                {availableSubtitles.map((sub, idx) => {
+                  const isSelected = activeSubtitle && activeSubtitle.url === sub.url;
+                  const isAss = sub.format === 'ass' || sub.format === 'ssa';
+
                   return (
                     <button
-                      key={i}
-                      onClick={() => handleSelectSubtitle(sub)}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border text-xs font-medium transition-all ${
+                      key={sub.url || idx}
+                      onClick={() => {
+                        setActiveSubtitle(sub);
+                        setShowSubModal(false);
+                      }}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-medium transition text-left ${
                         isSelected
-                          ? 'bg-vault-accent text-white border-vault-accent font-semibold shadow-md shadow-vault-accent/20'
-                          : 'bg-vault-850 text-slate-300 border-vault-800 hover:bg-vault-800'
+                          ? 'bg-vault-accent/20 border-vault-accent text-vault-accent'
+                          : 'bg-vault-950 border-vault-800 text-slate-300 hover:border-vault-700'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="px-1.5 py-0.5 rounded bg-black/40 text-[10px] font-mono uppercase">
-                          {sub.format}
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-slate-200">
+                          {sub.label}
                         </span>
-                        <span>{sub.label}</span>
+                        <span className="text-[11px] text-slate-500 font-mono">
+                          {sub.isEmbedded ? 'Softsub internal (MKV container)' : sub.filename}
+                        </span>
                       </div>
-                      {isSelected && <Check className="w-4 h-4" />}
+                      <div className="flex items-center gap-2">
+                        {isAss && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
+                            ASS CANVAS
+                          </span>
+                        )}
+                        {isSelected && <Check className="w-4 h-4 text-vault-accent" />}
+                      </div>
                     </button>
                   );
                 })}
-
-                {availableSubtitles.length === 0 && (
-                  <div className="p-3 rounded-xl bg-vault-850 border border-vault-800 text-xs text-slate-400 text-center">
-                    No external companion subtitle file detected in folder.
-                  </div>
-                )}
               </div>
 
-              {/* Upload custom subtitle file */}
-              <div className="pt-2 border-t border-vault-800">
-                <label className="text-xs font-semibold text-slate-300 block mb-2">
-                  Load Local Subtitle File (.ass / .srt)
+              {/* Upload Custom Subtitle File */}
+              <div className="pt-3 border-t border-vault-800">
+                <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-2">
+                  Atau Muat Subtitle dari Komputer
                 </label>
-                <label className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl border border-dashed border-vault-700 bg-vault-850 hover:bg-vault-800 text-slate-300 hover:text-white cursor-pointer transition-all text-xs font-medium">
-                  <Upload className="w-4 h-4 text-vault-accent" />
-                  <span>Choose file from hard drive</span>
+                <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-vault-700 hover:border-vault-accent rounded-xl cursor-pointer bg-vault-950 hover:bg-vault-850 transition">
+                  <Upload className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs text-slate-300 font-medium">Pilih File .ass / .srt / .vtt</span>
                   <input
                     type="file"
                     accept=".ass,.ssa,.srt,.vtt"
-                    onChange={handleCustomSubtitleUpload}
+                    onChange={handleLocalSubUpload}
                     className="hidden"
                   />
                 </label>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="pt-3 border-t border-vault-800 flex justify-end">
-              <button
-                onClick={() => setShowSubModal(false)}
-                className="px-4 py-2 rounded-xl bg-vault-800 hover:bg-vault-700 text-xs font-semibold text-white transition-colors"
-              >
-                Close
-              </button>
-            </div>
+      {/* Episode Drawer for Series */}
+      {showEpisodeDrawer && seriesEpisodes.length > 0 && (
+        <div className="fixed inset-y-0 right-0 z-40 w-80 bg-vault-950 border-l border-vault-800 shadow-2xl p-4 overflow-y-auto animate-in slide-in-from-right">
+          <div className="flex items-center justify-between pb-3 mb-3 border-b border-vault-800">
+            <h3 className="font-bold text-sm text-white">Daftar Episode</h3>
+            <button
+              onClick={() => setShowEpisodeDrawer(false)}
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-vault-800"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {seriesEpisodes.map((ep) => {
+              const isCurrent = ep.id === mediaItem.id;
+              return (
+                <button
+                  key={ep.id}
+                  onClick={() => {
+                    onSelectEpisode?.(ep);
+                    setShowEpisodeDrawer(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-xs text-left transition ${
+                    isCurrent
+                      ? 'bg-vault-accent/20 border-vault-accent text-vault-accent font-bold'
+                      : 'bg-vault-900 border-vault-800 text-slate-300 hover:bg-vault-850'
+                  }`}
+                >
+                  <span className="truncate pr-2">{ep.title}</span>
+                  <span className="text-[10px] font-mono text-slate-500">{ep.sizeFormatted}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

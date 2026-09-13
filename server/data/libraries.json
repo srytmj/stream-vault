@@ -1,0 +1,23 @@
+[
+  {
+    "id": "anime",
+    "name": "Anime Collection",
+    "path": "/media/anime",
+    "type": "anime",
+    "createdAt": "2026-09-13T16:29:09.049Z"
+  },
+  {
+    "id": "movies",
+    "name": "Movies",
+    "path": "/media/movies",
+    "type": "movies",
+    "createdAt": "2026-09-13T16:29:09.050Z"
+  },
+  {
+    "id": "tv",
+    "name": "TV Series",
+    "path": "/media/tv",
+    "type": "tv",
+    "createdAt": "2026-09-13T16:29:09.050Z"
+  }
+]
