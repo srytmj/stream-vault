@@ -1,0 +1,37 @@
+services:
+  stream-vault:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stream-vault
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - NODE_ENV=production
+      - PORT=8090
+      - HOST=0.0.0.0
+      - MEDIA_ROOT=/media
+      - LOG_LEVEL=info
+    volumes:
+      # Mount your host media collection read-only (:ro)
+      # Recommended folder structure:
+      # /media/anime
+      # /media/movies
+      # /media/tv
+      - ./media:/media:ro
+      # Optional: persistent cache for extracted subtitle files
+      - stream-vault-cache:/app/.cache
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8090/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          memory: 256M # StreamVault runs on <30MB idle RAM!
+
+volumes:
+  stream-vault-cache:

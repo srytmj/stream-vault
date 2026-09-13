@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-vault-950 text-slate-100;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f111a;
+}
+::-webkit-scrollbar-thumb {
+  background: #282e44;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4260;
+}
+
+/* Artplayer customization to blend seamlessly with StreamVault dark theme */
+.art-video-player {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.art-video-player .art-mask {
+  background: rgba(9, 10, 15, 0.75);
+}
+
+.art-video-player .art-bottom {
+  background: linear-gradient(to top, rgba(9, 10, 15, 0.95), rgba(9, 10, 15, 0.6) 60%, transparent 100%);
+}
+
+.art-video-player .art-progress {
+  height: 4px;
+  transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.art-video-player:hover .art-progress {
+  height: 6px;
+}

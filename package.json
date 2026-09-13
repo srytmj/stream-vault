@@ -1,0 +1,28 @@
+{
+  "name": "stream-vault",
+  "version": "1.0.0",
+  "description": "Zero Server-Side Transcode Self-Hosted Media Streaming Platform",
+  "private": true,
+  "scripts": {
+    "setup:samples": "node scripts/setup-sample-media.js",
+    "client:install": "cd client && npm install",
+    "server:install": "cd server && npm install",
+    "install:all": "npm run server:install && npm run client:install",
+    "client:dev": "cd client && npm run dev",
+    "server:dev": "cd server && npm run dev",
+    "build:client": "cd client && npm run build",
+    "start": "cd server && node src/index.js"
+  },
+  "keywords": [
+    "streaming",
+    "homelab",
+    "zero-transcode",
+    "anime",
+    "mkv",
+    "ass-subtitles",
+    "jassub",
+    "artplayer"
+  ],
+  "author": "StreamVault Contributors",
+  "license": "MIT"
+}
