@@ -46,3 +46,10 @@ This log tracks multi-agent concurrency locks and task execution states for `str
   - Added global `Escape` keyboard listener to effortlessly dismiss any active modal
   - Passed `mediaStats` correctly to `StatsModal`
   - Rebuilt client bundle and verified clean boot
+
+- **2026-09-13T17:03:45Z** | Agent: Antigravity | Status: `[COMPLETED]` - Visual thumbnails per folder and per video file (0% server transcode)
+  - Enhanced `server/src/explorer.js` to discover folder artwork and companion file poster images
+  - Built `VideoThumbnail.jsx` with zero-transcode client-side HTML5 canvas snapshot generator and in-memory caching
+  - Updated `FolderExplorer.jsx` to show visual subfolder poster cards with badge counts and 16:9 video thumbnails
+  - Added Grid, Compact, and Details Table view switchers inside `FolderExplorer.jsx`
+  - Integrated `VideoThumbnail` into `MediaCard.jsx` and `MediaGrid.jsx` Details table

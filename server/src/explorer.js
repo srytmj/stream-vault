@@ -64,9 +64,11 @@ export function browseFolder(libraryRoot, relativeSubpath = '') {
       : entry.name;
 
     if (entry.isDirectory()) {
-      // Calculate item count inside this subfolder
+      // Calculate item count and discover folder thumbnail inside subfolder
       let childCount = 0;
       let hasVideos = false;
+      let subfolderPosterUrl = null;
+
       try {
         const subEntries = fs.readdirSync(fullPath, { withFileTypes: true });
         for (const sub of subEntries) {
@@ -74,6 +76,11 @@ export function browseFolder(libraryRoot, relativeSubpath = '') {
           childCount++;
           if (sub.isFile()) {
             const ext = path.extname(sub.name).toLowerCase();
+            if (config.ALLOWED_POSTER_EXTENSIONS.includes(ext) && !subfolderPosterUrl) {
+              const subPoster = path.join(fullPath, sub.name);
+              const relToMedia = path.relative(config.MEDIA_ROOT, subPoster);
+              subfolderPosterUrl = `/api/poster?path=${encodeURIComponent(relToMedia)}`;
+            }
             if (config.ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
               hasVideos = true;
             }
@@ -86,6 +93,7 @@ export function browseFolder(libraryRoot, relativeSubpath = '') {
         subpath: itemSubpath,
         childCount,
         hasVideos,
+        posterUrl: subfolderPosterUrl,
       });
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
@@ -102,9 +110,25 @@ export function browseFolder(libraryRoot, relativeSubpath = '') {
       const encodedMedia = encodeURIComponent(relToMedia);
       const subtitles = findCompanionSubtitles(fullPath);
 
+      // Check for file-specific companion poster (e.g. videoName.jpg / videoName.svg)
+      let filePosterUrl = null;
+      const baseNoExt = path.basename(entry.name, ext);
+      for (const posterExt of config.ALLOWED_POSTER_EXTENSIONS) {
+        const potentialPoster = path.join(targetDir, baseNoExt + posterExt);
+        if (fs.existsSync(potentialPoster)) {
+          const relPoster = path.relative(config.MEDIA_ROOT, potentialPoster);
+          filePosterUrl = `/api/poster?path=${encodeURIComponent(relPoster)}`;
+          break;
+        }
+      }
+
+      // Fallback to directory poster if no individual companion poster
+      if (!filePosterUrl) {
+        filePosterUrl = folderPosterUrl;
+      }
+
       // Clean display title
-      const baseName = path.basename(entry.name, ext);
-      const cleanTitle = baseName
+      const cleanTitle = baseNoExt
         .replace(/\[[^\]]*\]/g, '')
         .replace(/\([^\)]*\)/g, '')
         .replace(/\./g, ' ')
@@ -116,13 +140,13 @@ export function browseFolder(libraryRoot, relativeSubpath = '') {
         filename: entry.name,
         subpath: itemSubpath,
         relativePath: relToMedia,
-        title: cleanTitle || baseName,
+        title: cleanTitle || baseNoExt,
         extension: ext,
         size: stat.size,
         sizeFormatted: formatBytes(stat.size),
         modifiedAt: stat.mtime.toISOString(),
         streamUrl: `/api/stream?path=${encodedMedia}`,
-        posterUrl: folderPosterUrl,
+        posterUrl: filePosterUrl,
         subtitles,
       });
     }

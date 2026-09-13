@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Film, Tv, Sparkles, Subtitles, Layers } from 'lucide-react';
 import { getCategoryBadgeClass } from '../utils/formatters';
+import VideoThumbnail from './VideoThumbnail';
 
 export default function MediaCard({
   item,
@@ -29,6 +30,14 @@ export default function MediaCard({
             alt={item.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
+          />
+        ) : !isSeries && item.streamUrl ? (
+          <VideoThumbnail
+            streamUrl={item.streamUrl}
+            posterUrl={null}
+            alt={item.title}
+            aspectRatio="aspect-[16/10]"
+            showPlayIcon={false}
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
@@ -88,27 +97,30 @@ export default function MediaCard({
       </div>
 
       {/* Info Card Content */}
-      <div className={`${compact ? 'p-2.5' : 'p-3.5'} flex-1 flex flex-col justify-between`}>
+      <div className={`flex flex-col flex-1 justify-between ${compact ? 'p-3' : 'p-4'}`}>
         <div>
           <h3
-            className={`font-bold ${
-              compact ? 'text-xs leading-snug' : 'text-sm'
-            } text-slate-100 group-hover:text-vault-accent transition-colors line-clamp-1 mb-0.5`}
+            className={`font-bold text-white group-hover:text-vault-accent transition-colors duration-200 line-clamp-1 ${
+              compact ? 'text-xs' : 'text-sm'
+            }`}
+            title={item.title}
           >
             {item.title}
           </h3>
 
-          {!isSeries && item.showName && item.showName !== item.title && (
-            <p className="text-[11px] text-slate-400 line-clamp-1 mb-1.5">
-              {item.showName}
+          {!isSeries && item.filename && (
+            <p className="text-[11px] text-slate-500 font-mono truncate mt-0.5" title={item.filename}>
+              {item.filename}
             </p>
           )}
         </div>
 
-        <div className="pt-1.5 border-t border-vault-800/60 flex items-center justify-between text-[10px] text-slate-400">
-          <span>{isSeries ? item.totalSizeFormatted : item.sizeFormatted}</span>
-          <span className="text-slate-500 truncate ml-1">
-            {isSeries ? `${item.totalEpisodes} Eps` : 'Direct Stream'}
+        <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-vault-800/80 text-[11px] text-slate-400">
+          <span className="font-mono text-slate-400 text-[10px]">
+            {isSeries ? `${item.totalSizeFormatted}` : item.sizeFormatted}
+          </span>
+          <span className="text-[10px] text-slate-500">
+            {isSeries ? `${item.totalEpisodes} files` : 'Direct Play'}
           </span>
         </div>
       </div>
