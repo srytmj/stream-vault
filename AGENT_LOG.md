@@ -39,3 +39,10 @@ This log tracks multi-agent concurrency locks and task execution states for `str
   - Added multi-mode File Explorer display switcher: Poster Grid (Large), Compact Icons (Medium), and Details Table with file size, modified date, format, and subtitle badges
   - Implemented embedded MKV/MP4 softsub probe and extraction (`subtitles.js`)
   - Added "Direct Play: Original (Hardware Accelerated)" quality and zero-transcode badge to player controls
+
+- **2026-09-13T16:44:11Z** | Agent: Antigravity | Status: `[COMPLETED]` - Full UI/UX audit and bugfix: modal auto-opening, click interception, overlay z-index, keyboard shortcut collisions
+  - Added `isOpen` guard clauses to `StatsModal.jsx` and `KeyboardShortcutsModal.jsx` to stop premature rendering on page load
+  - Implemented backdrop click-outside-to-close handlers on all modals (`StatsModal`, `KeyboardShortcutsModal`, `SeriesModal`, `AddLibraryModal`) with `stopPropagation()` on dialog containers
+  - Added global `Escape` keyboard listener to effortlessly dismiss any active modal
+  - Passed `mediaStats` correctly to `StatsModal`
+  - Rebuilt client bundle and verified clean boot

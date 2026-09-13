@@ -39,8 +39,14 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-vault-900 border border-vault-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-vault-900 border border-vault-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-vault-800 bg-vault-950/60">
           <div className="flex items-center gap-2.5">

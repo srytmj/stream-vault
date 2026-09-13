@@ -64,6 +64,20 @@ export default function App() {
     localStorage.setItem('sv_display_mode', mode);
   };
 
+  // Close open modals on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowStatsModal(false);
+        setShowShortcutsModal(false);
+        setShowAddLibraryModal(false);
+        setActiveSeriesModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Load libraries and initial media catalog
   const loadData = useCallback(async (force = false) => {
     try {
@@ -368,6 +382,7 @@ export default function App() {
         isOpen={showStatsModal}
         onClose={() => setShowStatsModal(false)}
         serverHealth={serverHealth}
+        mediaStats={libraryData}
       />
 
       {/* Keyboard Shortcuts Cheat Sheet Modal */}

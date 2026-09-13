@@ -1,10 +1,18 @@
 import React from 'react';
 import { Cpu, HardDrive, ShieldCheck, Zap, X, Server, Layers } from 'lucide-react';
 
-export default function StatsModal({ serverHealth, mediaStats, onClose }) {
+export default function StatsModal({ isOpen, serverHealth, mediaStats, onClose }) {
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
-      <div className="relative bg-vault-900 border border-vault-700/80 rounded-2xl max-w-lg w-full shadow-2xl p-6">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative bg-vault-900 border border-vault-800 rounded-2xl max-w-lg w-full shadow-2xl p-6"
+      >
         <div className="flex items-center justify-between pb-4 border-b border-vault-800">
           <div className="flex items-center gap-2">
             <Zap className="w-5 h-5 text-vault-accent" />
@@ -12,7 +20,7 @@ export default function StatsModal({ serverHealth, mediaStats, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-vault-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -92,7 +100,7 @@ export default function StatsModal({ serverHealth, mediaStats, onClose }) {
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-vault-800 hover:bg-vault-700 text-xs font-semibold text-white transition-colors"
           >
-            Close
+            Tutup
           </button>
         </div>
       </div>
