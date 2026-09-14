@@ -28,14 +28,18 @@ FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Optional: Install ffmpeg solely for zero-transcode subtitle extraction (-c:s copy)
-# Server video/audio transcode is strictly 0% (disabled by architecture)
-RUN apk add --no-cache ffmpeg
+# 1. FFmpeg is installed strictly for lightweight zero-transcode helpers (max concurrency 1)
+# 2. Tini is installed as PID 1 init reaper to automatically harvest child exit codes and prevent zombie processes
+RUN apk add --no-cache ffmpeg tini
 
 ENV NODE_ENV=production
 ENV PORT=8090
 ENV HOST=0.0.0.0
 ENV MEDIA_ROOT=/media
+ENV CACHE_DIR=/app/.cache
+ENV DATA_DIR=/app/data
+ENV FFMPEG_MAX_CONCURRENCY=1
+ENV FFMPEG_TIMEOUT_MS=15000
 
 # Copy production node_modules and server source
 COPY --from=server-builder /app/server/node_modules ./server/node_modules
@@ -45,10 +49,11 @@ COPY server/src ./server/src
 # Copy built frontend assets
 COPY --from=client-builder /app/client/dist ./client/dist
 
-# Default mount directory for homelab storage
-RUN mkdir -p /media /app/.cache
+# Default mount directories for homelab storage & persistent cache
+RUN mkdir -p /media /app/.cache /app/data
 
 EXPOSE 8090
 
 WORKDIR /app/server
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "src/index.js"]

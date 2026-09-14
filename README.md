@@ -1,8 +1,8 @@
 # StreamVault
 
-> "Zero Server-Side Transcode, 100% Client-Side Playback"
+> "Zero Server-Side Video Transcoding, 100% Client-Side Playback"
 >
-> A modern self-hosted web streaming platform tailored for personal anime, movie, and TV series collections directly from your homelab storage, without placing any transcoding load on your server CPU.
+> A modern self-hosted web streaming platform tailored for personal anime, movie, and TV series collections directly from your homelab storage, without placing video transcoding loads on your server CPU.
 
 ---
 
@@ -41,8 +41,9 @@ Traditional media servers (such as standard Plex or Jellyfin) often trigger FFmp
 
 ```mermaid
 graph LR
-    subgraph Server["Homelab Server (CPU 0%)"]
-        Disk[("Media Storage\n/media/anime\n/media/movies\n/media/tv")] --> Origin["Fastify HTTP 206\nByte-Range Origin Server\n(RAM <35MB)"]
+    subgraph Server["Homelab Server (CPU 0% Transcode)"]
+        Disk[("Media Storage\n/media/anime\n/media/movies\n/media/tv")] --> Origin["Fastify HTTP 206\nByte-Range Origin Server\n(Base RAM ~75MB)"]
+        Origin -.->|"Queued Background Helper\n(Max 1 Concurrency, Single-Thread)"| Worker["FFmpeg Frame Extractor\n& Subtitle Stream Copy"]
     end
 
     Origin -->|"HTTP 206 Partial Content (Bytes)"| Client["Client Browser / Device"]
@@ -55,10 +56,12 @@ graph LR
     end
 ```
 
-1. **Server CPU at 0%**: The backend never transcodes video or audio streams on the fly. The server operates strictly as an RFC 7233 HTTP range origin server.
+1. **Server CPU at 0% for Video Playback**: The backend never transcodes video or audio streams on the fly. The server operates strictly as an RFC 7233 HTTP range origin server.
 2. **100% Hardware Acceleration**: The client browser decodes video streams using local hardware decoders (NVIDIA NVDEC, Intel QuickSync, Apple Silicon, VideoToolbox).
 3. **Full Anime `.ass` Subtitle Fidelity**: Subtitles are never burned in on the server. StreamVault uses **JASSUB (WebAssembly libass)** to render subtitles directly onto an HTML5 canvas layer at 60 FPS, preserving all custom fonts, karaoke effects, and vector drawings.
-4. **Lightweight Footprint**: Memory usage remains under 35 MB RAM, making it suitable for Raspberry Pi, Intel N100 mini PCs, legacy NAS devices, or low-tier VPS instances.
+4. **Guarded Subprocess Helpers**:
+   - For video frame preview snapshots and softsub track extraction, FFmpeg/FFprobe runs as an internal helper strictly controlled by an **asynchronous concurrency queue** (`FFMPEG_MAX_CONCURRENCY=1`), `-threads 1`, hard timeouts (15s), and persistent negative caching to prevent any OOM-kills or CPU spikes.
+   - Base Node runtime sits at ~75 MB RAM. The recommended container memory limit is **512 MB** to comfortably support concurrent playback alongside single-worker thumbnail tasks.
 
 ---
 
@@ -66,8 +69,9 @@ graph LR
 
 | Feature | Standard Plex / Emby | Jellyfin (Burn-in ASS) | StreamVault |
 |---|---|---|---|
-| Server CPU Load During Playback | 50% - 100% (Transcoding) | 60% - 100% (Burn-in Transcode) | **0.0% (Zero Transcode)** |
-| Server Memory Usage | 400 MB - 1 GB+ | 300 MB - 800 MB | **< 35 MB** |
+| Server CPU Load During Playback | 50% - 100% (Transcoding) | 60% - 100% (Burn-in Transcode) | **0.0% (Direct Play Only)** |
+| Server Base Memory Usage | 400 MB - 1 GB+ | 300 MB - 800 MB | **~75 MB (512 MB Container Limit)** |
+| Subprocess Resource Guard | None | Configurable | **Queue Limiter + Hard 15s Timeout + Circuit Breaker** |
 | Anime Subtitle Quality (.ass) | Downscaled or dropped styles | Burned-in, rasterized text | **Native 1080p/4K Canvas (WASM)** |
 | Karaoke and Custom Font Effects | Often lost | Limited | **100% Accurate (libass engine)** |
 | Video Seeking Speed | High latency (buffer wait) | High latency | **Instant (<50ms via Byte-Range)** |
@@ -77,10 +81,11 @@ graph LR
 
 ## Key Features
 
-### 1. Unique Per-Video Thumbnail Extraction
-- Automated frame extraction directly from video files (MKV, MP4, WebM, AVI, TS) using native FFmpeg.
-- Hashed disk caching (`.cache/thumbnails/`) using SHA-256 for instant cache hits and minimal disk I/O.
-- Elimination of cross-file poster contamination: standalone episodes and videos receive their own unique visual preview.
+### 1. Guarded Native Video Thumbnail Extraction
+- Automated frame extraction directly from video files (MKV, MP4, WebM, AVI, TS) using single-threaded FFmpeg.
+- Subtitle and font attachment parsing disabled (`-sn -an -dn`) to eliminate memory bloat when scanning complex MKV files.
+- Persistent SHA-256 disk caching (`.cache/thumbnails/`) with negative SVG caching: corrupt or failing files fail fast and never trigger retry loops.
+- Asynchronous concurrency limiter ensures container memory stays safely within bounds.
 
 ### 2. Three-Mode Folder Thumbnail System
 Configure thumbnails for any folder or series through an interactive modal:
@@ -120,11 +125,12 @@ stream-vault/
 │   └── src/
 │       ├── index.js            # Main application server and routes
 │       ├── config.js           # Environment and path configurations
-│       ├── thumbnails.js       # FFmpeg video frame extraction and 3-mode resolver
+│       ├── processQueue.js     # Asynchronous subprocess concurrency queue
+│       ├── thumbnails.js       # Guarded FFmpeg video frame extraction & 3-mode resolver
 │       ├── explorer.js         # Hierarchical file and folder explorer
 │       ├── scanner.js          # Media library indexer
 │       ├── streamer.js         # HTTP 206 Partial Content byte-range engine
-│       ├── subtitles.js        # Subtitle detection and language identification
+│       ├── subtitles.js        # Guarded subtitle extraction and detection
 │       └── auth/
 │           ├── userStore.js    # scrypt password hashing and user persistence
 │           ├── tokenService.js # HMAC session token signing and verification
@@ -154,6 +160,7 @@ stream-vault/
 │           └── storage.js      # LocalStorage manager for watch progress
 │
 └── docs/
+    ├── services.md             # Homelab operational and deployment registry
     └── screenshots/            # Documentation images
 ```
 
@@ -161,7 +168,7 @@ stream-vault/
 
 ## Quick Start Guide
 
-### Option 1: Docker Deployment
+### Option 1: Docker Deployment (Recommended)
 
 1. Set up your media directory and start the container:
 
@@ -191,11 +198,18 @@ services:
       - MEDIA_ROOT=/media
       - PORT=8090
       - AUTH_ENABLED=true
+      - FFMPEG_MAX_CONCURRENCY=1
     volumes:
       # Replace with your actual media storage mount path:
       - /mnt/storage/media:/media:ro
       - stream-vault-cache:/app/.cache
-      - stream-vault-data:/app/server/data
+      - stream-vault-data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
 ```
 
 > **Security Note**: The `:ro` (Read-Only) flag ensures that StreamVault cannot alter or delete files on your media drives.
@@ -270,7 +284,7 @@ When enabled, a "Sign in with Single Sign-On (OIDC)" button appears automaticall
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/health` | Server health, memory metrics, uptime, and 0% CPU indicator |
+| `GET` | `/api/health` | Server health, memory metrics, queue stats, and uptime |
 | `POST`| `/api/auth/login` | Authenticate with username and password, returns session token |
 | `GET` | `/api/auth/me` | Retrieve authenticated user profile and permissions |
 | `POST`| `/api/auth/change-password` | Update user password |
@@ -278,12 +292,13 @@ When enabled, a "Sign in with Single Sign-On (OIDC)" button appears automaticall
 | `GET` | `/api/media` | Retrieve complete indexed media catalog |
 | `POST`| `/api/media/scan` | Trigger background media directory rescan |
 | `GET` | `/api/browse?subpath=...` | Browse folders and files with metadata and thumbnails |
-| `GET` | `/api/thumbnail?path=...` | Get or generate native video frame thumbnail |
+| `GET` | `/api/thumbnail?path=...` | Get or generate native video frame thumbnail (guarded queue) |
 | `GET` | `/api/folders/config?subpath=...` | Get 3-mode thumbnail configuration for a folder |
 | `POST`| `/api/folders/thumbnail` | Update folder thumbnail mode (`auto`, `custom`, `none`) or upload cover |
 | `GET` | `/api/folders/thumbnail/image?folder=...` | Serve custom uploaded folder thumbnail |
 | `GET` | `/api/stream?path=...` | Stream video content via HTTP 206 Partial Content (Byte Ranges) |
 | `GET` | `/api/subtitles?path=...` | Serve companion subtitle tracks (`.ass`, `.srt`, `.vtt`) |
+| `GET` | `/api/subtitles/extract?path=...` | Extract embedded subtitle track on-demand via raw stream copy |
 | `GET` | `/api/poster?path=...` | Serve companion poster image |
 
 ---

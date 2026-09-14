@@ -1,10 +1,11 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { config } from './config.js';
+import { ffmpegQueue } from './processQueue.js';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const LANGUAGE_MAP = {
   id: 'Indonesian',
@@ -33,6 +34,9 @@ const LANGUAGE_MAP = {
   zho: 'Chinese',
   ara: 'Arabic',
 };
+
+// In-memory cache for probed embedded tracks to avoid repeating ffprobe on identical files
+const probeCache = new Map();
 
 /**
  * Extract human language label from subtitle filename or tag
@@ -76,7 +80,7 @@ export function findCompanionSubtitles(videoFullPath) {
       const format = ext.replace('.', '').toUpperCase();
 
       const relPath = path.relative(config.MEDIA_ROOT, subFullPath);
-      const encodedPath = encodeURIComponent(relPath);
+      const encodedPath = encodeURIComponent(relPath.replace(/\\/g, '/'));
 
       subtitles.push({
         label: `${lang} (${format}) - External`,
@@ -101,7 +105,7 @@ export const findExternalSubtitles = findCompanionSubtitles;
  */
 export async function checkFfmpegAvailable() {
   try {
-    await execAsync('ffmpeg -version');
+    await execFileAsync('ffmpeg', ['-version'], { timeout: 3000 });
     return true;
   } catch {
     return false;
@@ -109,24 +113,61 @@ export async function checkFfmpegAvailable() {
 }
 
 /**
- * Probe embedded subtitle tracks inside MKV/MP4 containers via ffprobe or ffmpeg
+ * Probe embedded subtitle tracks inside MKV/MP4 containers via guarded single-thread ffprobe
  */
 export async function probeEmbeddedSubtitles(videoFullPath) {
+  if (!fs.existsSync(videoFullPath)) return [];
+
+  let stat;
+  try {
+    stat = fs.statSync(videoFullPath);
+  } catch {
+    return [];
+  }
+
+  const cacheKey = `${videoFullPath}-${stat.mtimeMs}-${stat.size}`;
+  if (probeCache.has(cacheKey)) {
+    return probeCache.get(cacheKey);
+  }
+
   const hasFfmpeg = await checkFfmpegAvailable();
   if (!hasFfmpeg) return [];
 
   try {
-    // ffprobe json inspection for subtitle streams
-    const { stdout } = await execAsync(
-      `ffprobe -v error -select_streams s -show_entries stream=index,codec_name:stream_tags=language,title -of json "${videoFullPath}"`
-    );
-    const data = JSON.parse(stdout);
-    if (!data.streams || !Array.isArray(data.streams)) return [];
+    const stdout = await ffmpegQueue.add(
+      async () => {
+        const args = [
+          '-v', 'error',
+          '-probesize', '1000000',
+          '-analyzeduration', '1000000',
+          '-threads', '1',
+          '-select_streams', 's',
+          '-show_entries', 'stream=index,codec_name:stream_tags=language,title',
+          '-of', 'json',
+          videoFullPath,
+        ];
 
-    const relPath = path.relative(config.MEDIA_ROOT, videoFullPath);
+        const { stdout: probeOut } = await execFileAsync('ffprobe', args, {
+          timeout: config.FFMPEG_TIMEOUT_MS,
+          killSignal: 'SIGKILL',
+          maxBuffer: 1024 * 1024,
+        });
+
+        return probeOut;
+      },
+      { description: `ffprobe subtitle tracks for ${path.basename(videoFullPath)}` }
+    );
+
+    const data = JSON.parse(stdout);
+    if (!data.streams || !Array.isArray(data.streams)) {
+      probeCache.set(cacheKey, []);
+      return [];
+    }
+
+    const relPath = path.relative(config.MEDIA_ROOT, videoFullPath).replace(/\\/g, '/');
     const encodedPath = encodeURIComponent(relPath);
 
-    return data.streams.map((stream, idx) => {
+    const tracks = data.streams.map((stream, idx) => {
       const streamIndex = stream.index;
       const langTag = stream.tags?.language || '';
       const titleTag = stream.tags?.title || '';
@@ -146,28 +187,58 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
         isDefault: false,
       };
     });
+
+    probeCache.set(cacheKey, tracks);
+    return tracks;
   } catch (err) {
+    console.warn(`[Subtitles] FFprobe inspection skipped/failed for ${path.basename(videoFullPath)}:`, err.message);
+    probeCache.set(cacheKey, []);
     return [];
   }
 }
 
 /**
- * Extract embedded subtitle stream using raw copy (-c:s copy)
+ * Extract embedded subtitle stream using guarded single-thread copy (-c:s copy)
  */
 export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
   const hashName = Buffer.from(videoFullPath + trackIndex).toString('hex').slice(0, 24);
-  const cacheFile = path.join(config.CACHE_DIR, 'subtitles', `${hashName}.ass`);
+  const subCacheDir = path.join(config.CACHE_DIR, 'subtitles');
+
+  if (!fs.existsSync(subCacheDir)) {
+    fs.mkdirSync(subCacheDir, { recursive: true });
+  }
+
+  const cacheFile = path.join(subCacheDir, `${hashName}.ass`);
 
   if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 0) {
     return cacheFile;
   }
 
-  const subCacheDir = path.join(config.CACHE_DIR, 'subtitles');
-  if (!fs.existsSync(subCacheDir)) {
-    fs.mkdirSync(subCacheDir, { recursive: true });
-  }
+  await ffmpegQueue.add(
+    async () => {
+      if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 0) {
+        return;
+      }
 
-  const cmd = `ffmpeg -y -i "${videoFullPath}" -map 0:${trackIndex} -c:s copy "${cacheFile}"`;
-  await execAsync(cmd);
+      const args = [
+        '-nostdin',
+        '-threads', '1',
+        '-loglevel', 'error',
+        '-y',
+        '-i', videoFullPath,
+        '-map', `0:${trackIndex}`,
+        '-c:s', 'copy',
+        cacheFile,
+      ];
+
+      await execFileAsync('ffmpeg', args, {
+        timeout: 30000,
+        killSignal: 'SIGKILL',
+        maxBuffer: 1024 * 1024,
+      });
+    },
+    { description: `subtitle extraction track ${trackIndex} for ${path.basename(videoFullPath)}` }
+  );
+
   return cacheFile;
 }

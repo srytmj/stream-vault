@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: stream-vault
     restart: unless-stopped
+    init: true # Reap zombie processes and handle POSIX signals correctly
+    pids_limit: 100 # Hard limit on total processes: prevents fork thrashing and host PID table exhaustion
     ports:
       - "8090:8090"
     environment:
@@ -12,16 +14,18 @@ services:
       - PORT=8090
       - HOST=0.0.0.0
       - MEDIA_ROOT=/media
+      - CACHE_DIR=/app/.cache
+      - DATA_DIR=/app/data
+      - FFMPEG_MAX_CONCURRENCY=1
+      - FFMPEG_TIMEOUT_MS=15000
       - LOG_LEVEL=info
     volumes:
       # Mount your host media collection read-only (:ro)
-      # Recommended folder structure:
-      # /media/anime
-      # /media/movies
-      # /media/tv
       - ./media:/media:ro
-      # Optional: persistent cache for extracted subtitle files
+      # Persistent cache for video frame thumbnails and extracted subtitles
       - stream-vault-cache:/app/.cache
+      # Persistent storage for folder metadata, libraries, and user databases
+      - stream-vault-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8090/api/health"]
       interval: 30s
@@ -31,7 +35,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M # StreamVault runs on <30MB idle RAM!
+          # 512MB accommodates Node baseline (~75MB) + 1 single-thread FFmpeg child worker (~150-200MB)
+          memory: 512M
+          pids: 100
+        reservations:
+          memory: 128M
 
 volumes:
   stream-vault-cache:
+  stream-vault-data:

@@ -53,3 +53,18 @@ This log tracks multi-agent concurrency locks and task execution states for `str
   - Updated `FolderExplorer.jsx` to show visual subfolder poster cards with badge counts and 16:9 video thumbnails
   - Added Grid, Compact, and Details Table view switchers inside `FolderExplorer.jsx`
   - Integrated `VideoThumbnail` into `MediaCard.jsx` and `MediaGrid.jsx` Details table
+
+- **2026-09-14T05:50:30Z** | Agent: Antigravity | Status: `[COMPLETED]` - Fix OOM crash-loop: FFmpeg concurrency queue, hard timeouts, stream/thread flags, negative cache, persistent cache volumes, and doc/banner alignment
+  - Created lightweight asynchronous process queue (`server/src/processQueue.js`) with configurable concurrency (`FFMPEG_MAX_CONCURRENCY=1`) and low-memory pre-spawn safeguards
+  - Updated `server/src/thumbnails.js` with request deduplication (`inFlightGenerations`), strict FFmpeg flags (`-nostdin`, `-threads 1`, `-sn`, `-an`, `-dn`), 15s hard timeout with `SIGKILL`, and persistent SVG negative caching (`knownFailedHashes`) to permanently eliminate restart crash-loops
+  - Updated `server/src/subtitles.js` with guarded queue execution for `ffprobe` (15s timeout, single thread) and `ffmpeg -c:s copy` (30s timeout, single thread) plus in-memory probe caching
+  - Updated `server/src/config.js` to properly resolve `CACHE_DIR` and `DATA_DIR` across container and host environments
+  - Updated `docker-compose.yml` and `Dockerfile` to increase memory limit to 512M (128M reservation), map persistent volumes for `/app/.cache` and `/app/data`, and configure concurrency environment variables
+  - Aligned server startup banner and `/api/health` metrics to transparently report subprocess helper status and memory requirements
+  - Created `docs/services.md` and updated `README.md` for homelab service inventory registration
+  - Rebuilt client assets and verified with synthetic tests (0ms negative cache hit, zero runaway processes)
+
+- **2026-09-14T07:16:10Z** | Agent: Antigravity | Status: `[COMPLETED]` - Add Zombie Process Protection: tini init daemon, docker init: true, and pids_limit cgroup guard
+  - Added `tini` to Alpine runner image in `Dockerfile` and configured `ENTRYPOINT ["/sbin/tini", "--"]` to act as PID 1 zombie reaper
+  - Added `init: true` and `pids_limit: 100` (`deploy.resources.limits.pids: 100`) to `docker-compose.yml` to prevent fork bombs and guarantee PID table safety on the host LXC
+  - Updated `docs/services.md` to document zombie process reaping and process limits

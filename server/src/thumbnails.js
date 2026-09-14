@@ -4,10 +4,17 @@ import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { config } from './config.js';
+import { ffmpegQueue } from './processQueue.js';
 
 const execFileAsync = promisify(execFile);
 
 const FOLDERS_META_PATH = path.join(config.DATA_DIR, 'folders_meta.json');
+
+// Deduplication map: in-flight thumbnail promises keyed by video hash
+const inFlightGenerations = new Map();
+
+// Known failed files (circuit breaker) to prevent infinite retry loops
+const knownFailedHashes = new Set();
 
 // Ensure directories exist
 function ensureDirs() {
@@ -194,7 +201,7 @@ export function resolveFolderPoster(folderFullPath, folderRelPath) {
 }
 
 /**
- * Generate or get cached video frame thumbnail using ffmpeg
+ * Generate or get cached video frame thumbnail using guarded single-thread FFmpeg queue
  */
 export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:00:03') {
   ensureDirs();
@@ -203,7 +210,7 @@ export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:
     throw new Error('Video file not found');
   }
 
-  // 1. Check exact companion poster first
+  // 1. Check exact companion poster first (instant zero-transcode hit)
   const companion = findExactCompanionPoster(videoFullPath);
   if (companion) {
     return { filePath: companion, isCompanion: true };
@@ -216,55 +223,119 @@ export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:
     .update(`${videoFullPath}-${stat.size}-${stat.mtimeMs}`)
     .digest('hex');
 
-  const cacheFile = path.join(config.THUMBNAILS_DIR, `${hash}.jpg`);
-
-  if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 100) {
-    return { filePath: cacheFile, isCompanion: false };
-  }
-
-  // 3. Extract frame using ffmpeg
-  try {
-    const args = [
-      '-ss', seekTime,
-      '-i', videoFullPath,
-      '-frames:v', '1',
-      '-q:v', '2',
-      '-vf', 'scale=480:-1',
-      cacheFile,
-      '-y',
-    ];
-
-    await execFileAsync('ffmpeg', args, { timeout: 10000 });
-
-    if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 100) {
-      return { filePath: cacheFile, isCompanion: false };
-    }
-  } catch (err) {
-    // Retry at 1 second if 3 seconds failed (e.g. short video)
-    try {
-      const fallbackArgs = [
-        '-ss', '00:00:01',
-        '-i', videoFullPath,
-        '-frames:v', '1',
-        '-q:v', '2',
-        '-vf', 'scale=480:-1',
-        cacheFile,
-        '-y',
-      ];
-      await execFileAsync('ffmpeg', fallbackArgs, { timeout: 10000 });
-      if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 100) {
-        return { filePath: cacheFile, isCompanion: false };
-      }
-    } catch (fallbackErr) {
-      console.warn(`FFmpeg thumbnail generation failed for ${path.basename(videoFullPath)}:`, fallbackErr.message);
-    }
-  }
-
-  // 4. If ffmpeg failed or unsupported, generate SVG placeholder thumbnail
-  const svgPlaceholder = generateSvgThumbnail(path.basename(videoFullPath));
+  const jpgCacheFile = path.join(config.THUMBNAILS_DIR, `${hash}.jpg`);
   const svgCacheFile = path.join(config.THUMBNAILS_DIR, `${hash}.svg`);
-  fs.writeFileSync(svgCacheFile, svgPlaceholder, 'utf8');
-  return { filePath: svgCacheFile, isCompanion: false };
+
+  // Positive cache hit: valid JPEG frame exists
+  if (fs.existsSync(jpgCacheFile) && fs.statSync(jpgCacheFile).size > 100) {
+    return { filePath: jpgCacheFile, isCompanion: false };
+  }
+
+  // Negative cache hit: SVG fallback already generated from previous failure
+  if (fs.existsSync(svgCacheFile) && fs.statSync(svgCacheFile).size > 50) {
+    return { filePath: svgCacheFile, isCompanion: false };
+  }
+
+  // Circuit breaker: known failed hash prevents re-invoking heavy FFmpeg
+  if (knownFailedHashes.has(hash)) {
+    const svgPlaceholder = generateSvgThumbnail(path.basename(videoFullPath));
+    fs.writeFileSync(svgCacheFile, svgPlaceholder, 'utf8');
+    return { filePath: svgCacheFile, isCompanion: false };
+  }
+
+  // Deduplication: if another request is already generating thumbnail for this hash, await it
+  if (inFlightGenerations.has(hash)) {
+    return inFlightGenerations.get(hash);
+  }
+
+  const generationPromise = (async () => {
+    try {
+      // 3. Queue guarded FFmpeg child process
+      await ffmpegQueue.add(
+        async () => {
+          // Double check cache in case another worker produced it while queued
+          if (fs.existsSync(jpgCacheFile) && fs.statSync(jpgCacheFile).size > 100) {
+            return;
+          }
+
+          // Resource-safe FFmpeg flags:
+          // -nostdin: prevents stdin lock
+          // -threads 1: restricts memory and thread explosion
+          // -an: disables audio decoding & buffering
+          // -sn: disables subtitle and embedded font attachment demuxing!
+          // -dn: disables data streams
+          // -loglevel error: silences verbose stderr
+          const args = [
+            '-nostdin',
+            '-threads', '1',
+            '-an',
+            '-sn',
+            '-dn',
+            '-loglevel', 'error',
+            '-ss', seekTime,
+            '-i', videoFullPath,
+            '-frames:v', '1',
+            '-q:v', '2',
+            '-vf', 'scale=480:-1',
+            jpgCacheFile,
+            '-y',
+          ];
+
+          try {
+            await execFileAsync('ffmpeg', args, {
+              timeout: config.FFMPEG_TIMEOUT_MS,
+              killSignal: 'SIGKILL',
+              maxBuffer: 1024 * 1024,
+            });
+          } catch (firstErr) {
+            // Fallback retry at 1s in case video is short (< 3s)
+            const fallbackArgs = [
+              '-nostdin',
+              '-threads', '1',
+              '-an',
+              '-sn',
+              '-dn',
+              '-loglevel', 'error',
+              '-ss', '00:00:01',
+              '-i', videoFullPath,
+              '-frames:v', '1',
+              '-q:v', '2',
+              '-vf', 'scale=480:-1',
+              jpgCacheFile,
+              '-y',
+            ];
+
+            await execFileAsync('ffmpeg', fallbackArgs, {
+              timeout: config.FFMPEG_TIMEOUT_MS,
+              killSignal: 'SIGKILL',
+              maxBuffer: 1024 * 1024,
+            });
+          }
+        },
+        { description: `thumbnail for ${path.basename(videoFullPath)}` }
+      );
+
+      if (fs.existsSync(jpgCacheFile) && fs.statSync(jpgCacheFile).size > 100) {
+        return { filePath: jpgCacheFile, isCompanion: false };
+      }
+    } catch (err) {
+      console.warn(`[Thumbnails] FFmpeg skipped/failed for ${path.basename(videoFullPath)}: ${err.message}. Serving persistent SVG placeholder.`);
+      knownFailedHashes.add(hash);
+    }
+
+    // 4. Fallback: Save and serve persistent SVG placeholder (persisted so FFmpeg is never retried)
+    const svgPlaceholder = generateSvgThumbnail(path.basename(videoFullPath));
+    fs.writeFileSync(svgCacheFile, svgPlaceholder, 'utf8');
+    return { filePath: svgCacheFile, isCompanion: false };
+  })();
+
+  inFlightGenerations.set(hash, generationPromise);
+
+  try {
+    return await generationPromise;
+  } finally {
+    inFlightGenerations.delete(hash);
+  }
 }
 
 /**

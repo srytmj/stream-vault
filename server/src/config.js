@@ -25,14 +25,41 @@ function resolveMediaRoot() {
   return path.resolve(process.cwd(), '../media');
 }
 
+// Resolve cache directory with Docker and local path support
+function resolveCacheDir() {
+  if (process.env.CACHE_DIR) {
+    return path.resolve(process.env.CACHE_DIR);
+  }
+  if (fs.existsSync('/app/.cache')) {
+    return '/app/.cache';
+  }
+  return path.resolve(process.cwd(), '.cache');
+}
+
+// Resolve persistent data directory with Docker and local path support
+function resolveDataDir() {
+  if (process.env.DATA_DIR) {
+    return path.resolve(process.env.DATA_DIR);
+  }
+  if (fs.existsSync('/app/data')) {
+    return '/app/data';
+  }
+  return path.resolve(process.cwd(), 'data');
+}
+
+const resolvedCacheDir = resolveCacheDir();
+const resolvedDataDir = resolveDataDir();
+
 export const config = {
   PORT: parseInt(process.env.PORT || '8090', 10),
   HOST: process.env.HOST || '0.0.0.0',
   MEDIA_ROOT: resolveMediaRoot(),
-  CACHE_DIR: path.resolve(process.cwd(), '.cache'),
-  THUMBNAILS_DIR: path.resolve(process.cwd(), '.cache/thumbnails'),
-  DATA_DIR: path.resolve(process.cwd(), 'data'),
-  FOLDER_THUMBS_DIR: path.resolve(process.cwd(), 'data/folder_thumbnails'),
+  CACHE_DIR: resolvedCacheDir,
+  THUMBNAILS_DIR: path.join(resolvedCacheDir, 'thumbnails'),
+  DATA_DIR: resolvedDataDir,
+  FOLDER_THUMBS_DIR: path.join(resolvedDataDir, 'folder_thumbnails'),
+  FFMPEG_MAX_CONCURRENCY: Math.max(1, parseInt(process.env.FFMPEG_MAX_CONCURRENCY || '1', 10)),
+  FFMPEG_TIMEOUT_MS: parseInt(process.env.FFMPEG_TIMEOUT_MS || '15000', 10),
   AUTH_SECRET: process.env.AUTH_SECRET || 'streamvault-dev-secret-key-change-in-production',
   AUTH_ENABLED: process.env.AUTH_ENABLED !== 'false', // Default enabled
   OIDC: {

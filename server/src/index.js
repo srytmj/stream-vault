@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import mime from 'mime-types';
 import { config } from './config.js';
+import { ffmpegQueue } from './processQueue.js';
 import { scanMediaLibrary } from './scanner.js';
 import { handleByteRangeStream, resolveSafePath } from './streamer.js';
 import {
@@ -214,15 +215,19 @@ app.get('/api/health', async () => {
     status: 'online',
     appName: 'stream-vault',
     version: '1.2.0',
-    philosophy: 'Zero Server-Side Transcode, 100% Client-Side Playback',
+    philosophy: 'Zero Server-Side Video Transcode (Direct Play Only)',
     serverCpuUsage: '0% Transcode Load (Pure Origin Range Streaming)',
     memory: {
       rssMb: Math.round(memUsage.rss / 1024 / 1024),
       heapUsedMb: Math.round(memUsage.heapUsed / 1024 / 1024),
     },
+    processQueue: ffmpegQueue.getStats(),
     uptimeSeconds: Math.floor(process.uptime()),
     mediaRoot: config.MEDIA_ROOT,
     mediaRootExists: fs.existsSync(config.MEDIA_ROOT),
+    cacheDir: config.CACHE_DIR,
+    dataDir: config.DATA_DIR,
+    ffmpegConcurrencyLimit: config.FFMPEG_MAX_CONCURRENCY,
     embeddedSubtitleExtractionAvailable: hasFfmpeg,
   };
 });
@@ -599,19 +604,29 @@ if (resolvedDist) {
 // Start Server
 async function start() {
   try {
-    if (!fs.existsSync(config.CACHE_DIR)) {
-      fs.mkdirSync(config.CACHE_DIR, { recursive: true });
+    // Ensure all data and cache directories exist
+    const dirsToEnsure = [
+      config.CACHE_DIR,
+      config.THUMBNAILS_DIR,
+      config.DATA_DIR,
+      config.FOLDER_THUMBS_DIR,
+    ];
+    for (const dir of dirsToEnsure) {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
     }
 
     await app.listen({ port: config.PORT, host: config.HOST });
     console.log(`
 ============================================================
-StreamVault Server Started Successfully!
-Philosophy: Zero Server-Side Transcode, 100% Client Playback
-URL: http://${config.HOST}:${config.PORT}
-Media Root: ${config.MEDIA_ROOT}
-Memory Footprint: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB RAM
-Auth: ${config.AUTH_ENABLED ? 'Enabled' : 'Disabled'} | Default Admin: admin / admin
+🚀 StreamVault Server Started Successfully!
+📡 Philosophy: Zero Server-Side Video Transcoding (Direct Play)
+⚡ Subprocess Guard: FFmpeg Queue (Concurrency=${config.FFMPEG_MAX_CONCURRENCY}, Timeout=${config.FFMPEG_TIMEOUT_MS / 1000}s)
+🌐 URL: http://${config.HOST}:${config.PORT}
+📁 Media Root: ${config.MEDIA_ROOT}
+💾 Base Memory: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB RAM (Recommended Container Limit: 512 MB)
+🔐 Auth: ${config.AUTH_ENABLED ? 'Enabled' : 'Disabled'} | Default Admin: admin / admin
 ============================================================
 `);
   } catch (err) {
