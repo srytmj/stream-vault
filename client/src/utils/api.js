@@ -68,7 +68,7 @@ export async function loginUser(username, password) {
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || 'Login gagal');
+    throw new Error(data.error || 'Login failed');
   }
 
   setStoredToken(data.token);
@@ -78,7 +78,7 @@ export async function loginUser(username, password) {
 export async function fetchAuthStatus() {
   const res = await apiFetch('/api/auth/status');
   if (!res.ok) {
-    throw new Error('Gagal memeriksa status autentikasi');
+    throw new Error('Failed to check authentication status');
   }
   return res.json();
 }
@@ -115,7 +115,7 @@ export async function changeUserPassword(currentPassword, newPassword) {
 
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || 'Gagal mengubah password');
+    throw new Error(data.error || 'Failed to update password');
   }
   return data;
 }
@@ -208,7 +208,7 @@ export async function fetchSubtitleTracks(videoPath) {
 export async function fetchFolderConfig(subpath = '') {
   const response = await apiFetch(`/api/folders/config?subpath=${encodeURIComponent(subpath)}`);
   if (!response.ok) {
-    throw new Error('Gagal memuat konfigurasi folder');
+    throw new Error('Failed to load folder configuration');
   }
   return response.json();
 }
@@ -241,8 +241,7 @@ export async function updateFolderThumbnail({ subpath, mode, file, imageBase64 }
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || 'Gagal menyimpan thumbnail folder');
+    throw new Error(errData.error || 'Failed to save folder thumbnail');
   }
-
   return response.json();
 }

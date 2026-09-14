@@ -12,10 +12,10 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
     { key: '↑ / ↓', action: 'Increase / decrease volume 10%' },
     { key: 'M', action: 'Mute / unmute audio' },
     { key: 'F', action: 'Toggle Fullscreen' },
-    { key: 'C', action: 'Pilih subtitle / softsub' },
-    { key: 'N', action: 'Episode selanjutnya (series)' },
-    { key: 'P', action: 'Episode sebelumnya (series)' },
-    { key: 'Esc', action: 'Tutup modal / kembali' },
+    { key: 'C', action: 'Select subtitle / softsubs' },
+    { key: 'N', action: 'Next episode (series)' },
+    { key: 'P', action: 'Previous episode (series)' },
+    { key: 'Esc', action: 'Close modal / back' },
   ];
 
   return (
@@ -59,7 +59,7 @@ export default function KeyboardShortcutsModal({ isOpen, onClose }) {
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-vault-accent hover:bg-vault-accent-hover text-xs font-bold text-white transition-colors"
           >
-            Mengerti
+            Got it
           </button>
         </div>
       </div>

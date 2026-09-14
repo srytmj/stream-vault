@@ -118,22 +118,29 @@ export default function VideoPlayer({
 
   // Initialize Artplayer
   useEffect(() => {
-    if (!containerRef.current || !mediaItem) return;
+    if (!containerRef.current || !mediaItem?.streamUrl) return;
 
-    // Check saved progress
+    // Retrieve saved playback progress
     const saved = getSavedProgress(mediaItem.id);
-    const initialTime = saved && saved.currentTime > 5 && !saved.completed ? saved.currentTime : 0;
+    const initialTime = saved?.currentTime || 0;
 
     const art = new Artplayer({
       container: containerRef.current,
       url: mediaItem.streamUrl,
-      title: mediaItem.title,
       type: mediaItem.extension?.replace('.', '') || 'mp4',
-      theme: '#f47521', // Flame orange
+      title: mediaItem.title || mediaItem.filename,
+      poster: mediaItem.posterUrl || '',
+      volume: 0.8,
+      isLive: false,
+      muted: false,
       autoplay: true,
+      autoSize: false,
       autoMini: true,
+      loop: false,
+      flip: true,
       playbackRate: true,
       aspectRatio: true,
+      screenshot: true,
       setting: true,
       hotkey: true,
       pip: true,
@@ -141,90 +148,80 @@ export default function VideoPlayer({
       fullscreenWeb: true,
       miniProgressBar: true,
       playsInline: true,
-      autoOrientation: true,
+      airplay: true,
       lock: true,
       fastForward: true,
-      moreVideoAttr: {
-        crossOrigin: 'anonymous',
-        playsInline: true,
-        'webkit-playsinline': true,
-      },
+      autoPlayback: true,
+      theme: '#6366f1',
       icons: {
-        loading: '<div class="w-10 h-10 border-4 border-vault-accent border-t-transparent rounded-full animate-spin"></div>',
+        loading: '<div class="vault-loading-spinner"></div>',
       },
-      controls: [
+      settings: [
         {
-          name: 'quality-badge',
-          position: 'right',
-          html: '<span style="font-size: 11px; font-weight: bold; background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 6px; border-radius: 4px;">DIRECT PLAY</span>',
-          tooltip: 'Zero Transcode: 100% Original Quality Direct Stream',
-        },
-        {
-          name: 'subtitles-btn',
-          position: 'right',
-          html: `<span style="font-weight: bold; font-size: 13px; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px;">CC</span>`,
-          tooltip: 'Subtitles & ASS Softsubs',
-          click: () => {
-            setShowSubModal(true);
+          width: 200,
+          html: 'Playback Speed',
+          tooltip: '1.0x',
+          selector: [
+            { default: true, html: '1.0x', url: 1.0 },
+            { html: '0.75x', url: 0.75 },
+            { html: '1.25x', url: 1.25 },
+            { html: '1.5x', url: 1.5 },
+            { html: '2.0x', url: 2.0 },
+          ],
+          onSelect: function (item) {
+            art.playbackRate = item.url;
+            return item.html;
           },
         },
       ],
+      customType: {
+        mkv: function (video, url) {
+          video.src = url;
+        },
+        webm: function (video, url) {
+          video.src = url;
+        },
+      },
     });
 
     artRef.current = art;
 
-    // Fast keyboard shortcuts handling
+    // Controls visibility listener
+    art.on('control', (state) => {
+      setControlsVisible(state);
+    });
+
+    // Custom keyboard shortcuts
     const handleKeyDown = (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        return;
+      }
 
-      const video = art.video;
-      if (!video) return;
-
-      switch (e.key.toLowerCase()) {
-        case ' ':
-          e.preventDefault();
-          art.toggle();
-          break;
+      switch (e.key) {
         case 'j':
+        case 'J':
           e.preventDefault();
           art.seek = Math.max(0, art.currentTime - 10);
-          art.notice.show = `-10s (${formatDuration(art.currentTime)})`;
           break;
         case 'l':
+        case 'L':
           e.preventDefault();
           art.seek = Math.min(art.duration, art.currentTime + 10);
-          art.notice.show = `+10s (${formatDuration(art.currentTime)})`;
-          break;
-        case 'arrowleft':
-          e.preventDefault();
-          art.seek = Math.max(0, art.currentTime - 5);
-          art.notice.show = `-5s (${formatDuration(art.currentTime)})`;
-          break;
-        case 'arrowright':
-          e.preventDefault();
-          art.seek = Math.min(art.duration, art.currentTime + 5);
-          art.notice.show = `+5s (${formatDuration(art.currentTime)})`;
-          break;
-        case 'm':
-          e.preventDefault();
-          art.muted = !art.muted;
-          art.notice.show = art.muted ? 'Muted' : 'Unmuted';
-          break;
-        case 'f':
-          e.preventDefault();
-          art.fullscreen = !art.fullscreen;
           break;
         case 'c':
+        case 'C':
           e.preventDefault();
           setShowSubModal((prev) => !prev);
           break;
         case 'n':
+        case 'N':
           if (hasNextEpisode) {
             e.preventDefault();
             onNextEpisode();
           }
           break;
         case 'p':
+        case 'P':
           if (hasPrevEpisode) {
             e.preventDefault();
             onPrevEpisode();
@@ -237,13 +234,9 @@ export default function VideoPlayer({
 
     window.addEventListener('keydown', handleKeyDown);
 
-    // Video events
-    art.on('control', (state) => {
-      setControlsVisible(state);
-    });
-
+    // Initial seek to saved timestamp on ready
     art.on('ready', () => {
-      if (initialTime > 0) {
+      if (initialTime > 5 && initialTime < art.duration - 10) {
         art.seek = initialTime;
         setResumeToast({
           time: initialTime,
@@ -344,7 +337,7 @@ export default function VideoPlayer({
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-vault-900/80 hover:bg-vault-800 border border-white/10 text-slate-200 hover:text-white transition backdrop-blur-md text-xs font-semibold"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Kembali</span>
+            <span>Back</span>
           </button>
 
           <div className="flex flex-col">
@@ -433,7 +426,7 @@ export default function VideoPlayer({
             <div className="flex items-center justify-between px-6 py-4 border-b border-vault-800 bg-vault-950/60">
               <div className="flex items-center gap-2">
                 <Subtitles className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-base text-white">Pilih Subtitle & Softsub</h3>
+                <h3 className="font-bold text-base text-white">Select Subtitles & Softsubs</h3>
               </div>
               <button
                 onClick={() => setShowSubModal(false)}
@@ -445,13 +438,13 @@ export default function VideoPlayer({
 
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               <p className="text-xs text-slate-400">
-                Subtitle di-render langsung di HTML5 canvas via <span className="text-vault-accent font-semibold">JASSUB WebAssembly</span> tanpa transcode server.
+                Subtitles render directly onto the HTML5 canvas via <span className="text-vault-accent font-semibold">JASSUB WebAssembly</span> with zero server transcoding.
               </p>
 
               {/* Subtitle Track List */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                  Track Subtitle Tersedia
+                  Available Subtitle Tracks
                 </label>
 
                 {/* Off Option */}
@@ -466,7 +459,7 @@ export default function VideoPlayer({
                       : 'bg-vault-950 border-vault-800 text-slate-300 hover:border-vault-700'
                   }`}
                 >
-                  <span>Nonaktifkan Subtitle (Off)</span>
+                  <span>Disable Subtitles (Off)</span>
                   {activeSubtitle === null && <Check className="w-4 h-4" />}
                 </button>
 
@@ -492,7 +485,7 @@ export default function VideoPlayer({
                           {sub.label}
                         </span>
                         <span className="text-[11px] text-slate-500 font-mono">
-                          {sub.isEmbedded ? 'Softsub internal (MKV container)' : sub.filename}
+                          {sub.isEmbedded ? 'Internal softsub (MKV container)' : sub.filename}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -511,11 +504,11 @@ export default function VideoPlayer({
               {/* Upload Custom Subtitle File */}
               <div className="pt-3 border-t border-vault-800">
                 <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider block mb-2">
-                  Atau Muat Subtitle dari Komputer
+                  Or Load Subtitle from Computer
                 </label>
                 <label className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-vault-700 hover:border-vault-accent rounded-xl cursor-pointer bg-vault-950 hover:bg-vault-850 transition">
                   <Upload className="w-4 h-4 text-slate-400" />
-                  <span className="text-xs text-slate-300 font-medium">Pilih File .ass / .srt / .vtt</span>
+                  <span className="text-xs text-slate-300 font-medium">Select .ass / .srt / .vtt File</span>
                   <input
                     type="file"
                     accept=".ass,.ssa,.srt,.vtt"
@@ -533,7 +526,7 @@ export default function VideoPlayer({
       {showEpisodeDrawer && seriesEpisodes.length > 0 && (
         <div className="fixed inset-y-0 right-0 z-40 w-80 bg-vault-950 border-l border-vault-800 shadow-2xl p-4 overflow-y-auto animate-in slide-in-from-right">
           <div className="flex items-center justify-between pb-3 mb-3 border-b border-vault-800">
-            <h3 className="font-bold text-sm text-white">Daftar Episode</h3>
+            <h3 className="font-bold text-sm text-white">Episode List</h3>
             <button
               onClick={() => setShowEpisodeDrawer(false)}
               className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-vault-800"

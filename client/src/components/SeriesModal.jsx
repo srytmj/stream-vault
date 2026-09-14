@@ -31,7 +31,6 @@ export default function SeriesModal({
         onClick={(e) => e.stopPropagation()}
         className="relative bg-vault-900 border border-vault-800 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
       >
-        
         {/* Header with Artwork / Title */}
         <div className="p-6 bg-gradient-to-b from-vault-850 to-vault-900 border-b border-vault-800 flex items-start justify-between gap-4">
           <div className="min-w-0">
@@ -121,7 +120,7 @@ export default function SeriesModal({
                 </div>
 
                 <button className="opacity-0 group-hover:opacity-100 px-3 py-1.5 rounded-lg bg-vault-accent text-white text-xs font-bold transition-opacity shadow-sm shadow-vault-accent/30 shrink-0 ml-3">
-                  Putar
+                  Play
                 </button>
               </div>
             );

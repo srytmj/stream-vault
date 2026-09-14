@@ -25,7 +25,7 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError('Harap masukkan username dan password');
+      setError('Please enter username and password');
       return;
     }
 
@@ -35,7 +35,7 @@ export default function LoginPage() {
     try {
       await login(username.trim(), password);
     } catch (err) {
-      setError(err.message || 'Login gagal. Periksa kembali username dan password.');
+      setError(err.message || 'Login failed. Please check your username and password.');
     } finally {
       setLoading(false);
     }
@@ -129,11 +129,11 @@ export default function LoginPage() {
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Memverifikasi...</span>
+                <span>Verifying...</span>
               </>
             ) : (
               <>
-                <span>Masuk ke StreamVault</span>
+                <span>Sign In to StreamVault</span>
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -149,7 +149,7 @@ export default function LoginPage() {
               className="w-full py-2.5 bg-vault-800 hover:bg-vault-700 border border-vault-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition"
             >
               <Globe className="w-4 h-4 text-cyan-400" />
-              <span>Masuk dengan {providers.oidc.name || 'Single Sign-On (OIDC)'}</span>
+              <span>Sign In with {providers.oidc.name || 'Single Sign-On (OIDC)'}</span>
             </button>
           ) : (
             <div className="flex items-center justify-between text-[11px] text-slate-500 bg-vault-950 p-2.5 rounded-xl border border-vault-800">
@@ -166,7 +166,7 @@ export default function LoginPage() {
         <div className="mt-6 p-3 bg-vault-950/80 rounded-2xl border border-vault-800 text-[11px] text-slate-400 flex items-start gap-2">
           <ShieldCheck className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold text-slate-300">Akun Awal Homelab:</span>
+            <span className="font-bold text-slate-300">Default Homelab Credentials:</span>
             <div className="font-mono text-slate-400 mt-0.5">
               Username: <span className="text-vault-accent">admin</span> | Password:{' '}
               <span className="text-vault-accent">admin</span>

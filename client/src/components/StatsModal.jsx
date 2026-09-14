@@ -100,7 +100,7 @@ export default function StatsModal({ isOpen, serverHealth, mediaStats, onClose }
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-vault-800 hover:bg-vault-700 text-xs font-semibold text-white transition-colors"
           >
-            Tutup
+            Close
           </button>
         </div>
       </div>

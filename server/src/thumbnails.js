@@ -151,7 +151,7 @@ export function resolveFolderPoster(folderFullPath, folderRelPath) {
   const normRel = (folderRelPath || '').replace(/\\/g, '/').replace(/^\//, '').replace(/\/$/, '');
   const cfg = getFolderConfig(normRel);
 
-  // Mode 3: None / Biarin Kosong
+  // Mode 3: None / Empty
   if (cfg.mode === 'none') {
     return null;
   }

@@ -90,7 +90,7 @@ export default function Navbar({
               }`}
             >
               <Layers className="w-3.5 h-3.5 text-vault-accent" />
-              <span className="hidden sm:inline">Katalog</span>
+              <span className="hidden sm:inline">Catalog</span>
             </button>
             <button
               onClick={() => setActiveTab?.('explorer')}
@@ -112,7 +112,7 @@ export default function Navbar({
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Cari anime, film, episode..."
+              placeholder="Search anime, movies, series..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-vault-900 border border-vault-800 focus:border-vault-accent rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-vault-accent/20 transition-all"
@@ -158,7 +158,7 @@ export default function Navbar({
               className="flex items-center gap-1.5 px-3.5 py-2 bg-vault-accent hover:bg-vault-accent-hover text-white rounded-xl text-xs font-bold shadow-lg shadow-vault-accent/20 transition"
             >
               <FolderPlus className="w-4 h-4" />
-              <span>Tambah Library</span>
+              <span>Add Library</span>
             </button>
           )}
 
@@ -168,7 +168,7 @@ export default function Navbar({
             <button
               onClick={onOpenStats}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-vault-900 border border-vault-800 hover:border-vault-700 text-xs text-slate-300 group transition-all"
-              title="Klik untuk melihat performa server"
+              title="Click to view server performance"
             >
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="font-mono text-emerald-400 font-semibold">0% CPU</span>
@@ -181,7 +181,7 @@ export default function Navbar({
               onClick={onRefresh}
               disabled={isRefreshing}
               className="p-2 rounded-xl bg-vault-900 hover:bg-vault-850 border border-vault-800 hover:border-vault-700 text-slate-300 transition-all hover:text-vault-accent"
-              title="Rescan direktori media"
+              title="Rescan media directory"
             >
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-vault-accent' : ''}`} />
             </button>
@@ -201,7 +201,7 @@ export default function Navbar({
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center gap-2 px-2.5 py-1.5 bg-vault-900 hover:bg-vault-850 border border-vault-800 hover:border-vault-700 rounded-xl transition text-xs font-semibold text-slate-200 group"
-                  title="Akun Pengguna"
+                  title="User Account"
                 >
                   <div className="w-6 h-6 rounded-lg bg-vault-accent/20 border border-vault-accent/40 text-vault-accent flex items-center justify-center font-bold text-xs uppercase">
                     {user.username ? user.username[0] : 'U'}
@@ -233,7 +233,7 @@ export default function Navbar({
                       className="w-full px-3.5 py-2 text-left text-xs text-slate-300 hover:text-white hover:bg-vault-850 flex items-center gap-2 transition"
                     >
                       <Key className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Ganti Password</span>
+                      <span>Change Password</span>
                     </button>
 
                     <button
@@ -244,7 +244,7 @@ export default function Navbar({
                       className="w-full px-3.5 py-2 text-left text-xs text-red-400 hover:text-red-300 hover:bg-vault-850 flex items-center gap-2 transition"
                     >
                       <LogOut className="w-3.5 h-3.5" />
-                      <span>Keluar (Logout)</span>
+                      <span>Sign Out (Logout)</span>
                     </button>
                   </div>
                 )}

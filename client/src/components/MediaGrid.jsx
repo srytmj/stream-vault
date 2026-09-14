@@ -79,9 +79,9 @@ export default function MediaGrid({
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-vault-800">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>Koleksi Media</span>
+            <span>Media Catalog</span>
             <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-vault-850 text-vault-accent border border-vault-700">
-              {totalCount} item
+              {totalCount} items
             </span>
           </h2>
         </div>
@@ -96,7 +96,7 @@ export default function MediaGrid({
                   ? 'bg-vault-800 text-white shadow'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Poster Grid (Besar)"
+              title="Poster Grid (Large)"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
@@ -107,7 +107,7 @@ export default function MediaGrid({
                   ? 'bg-vault-800 text-white shadow'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Compact Icons (Sedang)"
+              title="Compact Cards (Medium)"
             >
               <List className="w-4 h-4" />
             </button>
@@ -118,7 +118,7 @@ export default function MediaGrid({
                   ? 'bg-vault-800 text-white shadow'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="Details View (Tabel File Explorer)"
+              title="Details View (File Explorer Table)"
             >
               <Table className="w-4 h-4" />
             </button>
@@ -132,9 +132,9 @@ export default function MediaGrid({
               onChange={(e) => setSortBy(e.target.value)}
               className="bg-transparent text-slate-300 focus:outline-none cursor-pointer pr-1"
             >
-              <option value="newest" className="bg-vault-900">Terbaru</option>
-              <option value="title" className="bg-vault-900">Nama A-Z</option>
-              <option value="size" className="bg-vault-900">Ukuran File</option>
+              <option value="newest" className="bg-vault-900">Newest</option>
+              <option value="title" className="bg-vault-900">Title A-Z</option>
+              <option value="size" className="bg-vault-900">File Size</option>
             </select>
           </div>
         </div>
@@ -148,13 +148,13 @@ export default function MediaGrid({
               <thead className="bg-vault-950/80 text-slate-400 border-b border-vault-800 font-semibold uppercase tracking-wider">
                 <tr>
                   <th className="py-3 px-4">Thumbnail</th>
-                  <th className="py-3 px-4">Nama File / Judul</th>
+                  <th className="py-3 px-4">File Name / Title</th>
                   <th className="py-3 px-3">Format</th>
-                  <th className="py-3 px-3">Ukuran</th>
-                  <th className="py-3 px-3">Kategori</th>
-                  <th className="py-3 px-3">Subtitle</th>
-                  <th className="py-3 px-3">Diperbarui</th>
-                  <th className="py-3 px-4 text-right">Aksi</th>
+                  <th className="py-3 px-3">Size</th>
+                  <th className="py-3 px-3">Category</th>
+                  <th className="py-3 px-3">Subtitles</th>
+                  <th className="py-3 px-3">Modified</th>
+                  <th className="py-3 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-vault-800/60">
@@ -222,7 +222,7 @@ export default function MediaGrid({
                           }}
                           className="px-3 py-1.5 bg-vault-accent hover:bg-vault-accent-hover text-white rounded-lg font-bold transition shadow-sm"
                         >
-                          Putar
+                          Play
                         </button>
                       </td>
                     </tr>
@@ -239,7 +239,7 @@ export default function MediaGrid({
           {sortedSeries.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <span>TV Series & Anime Berkala</span>
+                <span>TV Series & Episodic Anime</span>
                 <span className="text-xs text-slate-600">({sortedSeries.length})</span>
               </h3>
 
@@ -267,7 +267,7 @@ export default function MediaGrid({
           {sortedItems.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <span>Video & Film Tunggal</span>
+                <span>Standalone Movies & Videos</span>
                 <span className="text-xs text-slate-600">({sortedItems.length})</span>
               </h3>
 
@@ -296,11 +296,11 @@ export default function MediaGrid({
       {totalCount === 0 && (
         <div className="py-20 text-center bg-vault-900/50 border border-vault-800/80 rounded-2xl">
           <Film className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-200">Tidak ada media ditemukan</h3>
+          <h3 className="text-base font-bold text-slate-200">No media found</h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
             {searchQuery
-              ? `Tidak ada hasil untuk pencarian "${searchQuery}". Coba kata kunci lain.`
-              : 'Folder media kosong atau belum ada file video yang didukung (.mp4, .mkv, .webm).'}
+              ? `No results found for "${searchQuery}". Try a different keyword.`
+              : 'Media storage is empty or contains no supported video files (.mp4, .mkv, .webm).'}
           </p>
         </div>
       )}

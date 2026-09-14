@@ -110,12 +110,12 @@ app.get('/api/auth/providers', async () => {
 app.post('/api/auth/login', async (req, reply) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
-    return reply.status(400).send({ error: 'Username dan password wajib diisi' });
+    return reply.status(400).send({ error: 'Username and password are required' });
   }
 
   const user = getUserByUsername(username);
   if (!user || !user.passwordHash || !verifyPassword(password, user.passwordHash)) {
-    return reply.status(401).send({ error: 'Username atau password salah' });
+    return reply.status(401).send({ error: 'Invalid username or password' });
   }
 
   const token = signToken(user);
@@ -147,7 +147,7 @@ app.post('/api/auth/change-password', async (req, reply) => {
 
   const { currentPassword, newPassword } = req.body || {};
   if (!newPassword || newPassword.length < 4) {
-    return reply.status(400).send({ error: 'Password baru minimal 4 karakter' });
+    return reply.status(400).send({ error: 'New password must be at least 4 characters' });
   }
 
   const user = getUserById(req.user.id);
@@ -157,12 +157,12 @@ app.post('/api/auth/change-password', async (req, reply) => {
 
   if (user.authProvider === 'local') {
     if (!verifyPassword(currentPassword || '', user.passwordHash)) {
-      return reply.status(400).send({ error: 'Password saat ini salah' });
+      return reply.status(400).send({ error: 'Current password is incorrect' });
     }
   }
 
   updateUserPassword(user.id, newPassword);
-  return { success: true, message: 'Password berhasil diperbarui' };
+  return { success: true, message: 'Password updated successfully' };
 });
 
 // OIDC SSO Login Redirection
@@ -606,12 +606,12 @@ async function start() {
     await app.listen({ port: config.PORT, host: config.HOST });
     console.log(`
 ============================================================
-🚀 StreamVault Server Started Successfully!
-📡 Philosophy: Zero Server-Side Transcode, 100% Client Playback
-🌐 URL: http://${config.HOST}:${config.PORT}
-📁 Media Root: ${config.MEDIA_ROOT}
-💾 Memory Footprint: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB RAM
-🔐 Auth: ${config.AUTH_ENABLED ? 'Enabled' : 'Disabled'} | Default Admin: admin / admin
+StreamVault Server Started Successfully!
+Philosophy: Zero Server-Side Transcode, 100% Client Playback
+URL: http://${config.HOST}:${config.PORT}
+Media Root: ${config.MEDIA_ROOT}
+Memory Footprint: ${Math.round(process.memoryUsage().rss / 1024 / 1024)} MB RAM
+Auth: ${config.AUTH_ENABLED ? 'Enabled' : 'Disabled'} | Default Admin: admin / admin
 ============================================================
 `);
   } catch (err) {

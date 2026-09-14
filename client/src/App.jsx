@@ -102,7 +102,7 @@ export default function App() {
       setWatchHistory(getWatchHistory());
     } catch (err) {
       console.error('Failed to load StreamVault data:', err);
-      setError(err.message || 'Gagal memuat data dari server');
+      setError(err.message || 'Failed to load data from server');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -138,7 +138,7 @@ export default function App() {
 
   const handleDeleteLibrary = async (id, e) => {
     e.stopPropagation();
-    if (!window.confirm('Hapus library ini dari StreamVault? (File fisik di harddisk TIDAK akan terhapus)')) {
+    if (!window.confirm('Remove this library from StreamVault? (Physical media files on disk will NOT be deleted)')) {
       return;
     }
     try {
@@ -148,7 +148,7 @@ export default function App() {
         setActiveLibrary(null);
       }
     } catch (err) {
-      alert(err.message || 'Gagal menghapus library');
+      alert(err.message || 'Failed to remove library');
     }
   };
 
@@ -179,7 +179,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-vault-950 flex flex-col items-center justify-center text-center p-4">
         <Loader2 className="w-10 h-10 text-vault-accent animate-spin mb-3" />
-        <p className="text-sm font-semibold text-slate-300">Memeriksa sesi StreamVault...</p>
+        <p className="text-sm font-semibold text-slate-300">Checking StreamVault session...</p>
       </div>
     );
   }
@@ -233,7 +233,7 @@ export default function App() {
         {loading && (
           <div className="flex flex-col items-center justify-center py-28 text-center">
             <Loader2 className="w-12 h-12 text-vault-accent animate-spin mb-4" />
-            <p className="text-sm font-semibold text-slate-300">Menghubungkan ke origin range server...</p>
+            <p className="text-sm font-semibold text-slate-300">Connecting to origin range server...</p>
             <p className="text-xs text-slate-500 mt-1">Zero Transcode Architecture &bull; CPU 0%</p>
           </div>
         )}
@@ -247,7 +247,7 @@ export default function App() {
               onClick={() => loadData(true)}
               className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-xs font-semibold"
             >
-              Coba Lagi
+              Try Again
             </button>
           </div>
         )}
@@ -288,10 +288,10 @@ export default function App() {
                   <div>
                     <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                       <FolderTree className="w-5 h-5 text-amber-400" />
-                      <span>Pilih Library Homelab</span>
+                      <span>Select Homelab Library</span>
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Jelajahi file per-folder ala Jellyfin & Windows Explorer
+                      Browse directories and files like Jellyfin & Windows Explorer
                     </p>
                   </div>
 
@@ -300,7 +300,7 @@ export default function App() {
                     className="flex items-center gap-2 px-4 py-2 bg-vault-accent hover:bg-vault-accent-hover text-white rounded-xl text-xs font-bold shadow-lg shadow-vault-accent/20 transition"
                   >
                     <FolderPlus className="w-4 h-4" />
-                    <span>Tambah Library Baru</span>
+                    <span>Add New Library</span>
                   </button>
                 </div>
 
@@ -338,7 +338,7 @@ export default function App() {
                               <button
                                 onClick={(e) => handleDeleteLibrary(lib.id, e)}
                                 className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-vault-950 transition"
-                                title="Hapus Library"
+                                title="Remove Library"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -356,7 +356,7 @@ export default function App() {
 
                         <div className="mt-auto flex items-center justify-between text-xs text-slate-400 pt-3 border-t border-vault-800/60">
                           <span className="flex items-center gap-1 text-vault-accent font-semibold group-hover:translate-x-1 transition-transform">
-                            <span>Buka Folder</span>
+                            <span>Open Folder</span>
                             <span>&rarr;</span>
                           </span>
                           <span className="text-[11px] text-slate-500">Zero Transcode</span>

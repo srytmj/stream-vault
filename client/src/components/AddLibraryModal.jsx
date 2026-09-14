@@ -14,7 +14,7 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim() || !path.trim()) {
-      setError('Nama library dan folder path wajib diisi.');
+      setError('Library name and folder path are required.');
       return;
     }
 
@@ -32,7 +32,7 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
       setPath('');
       onClose();
     } catch (err) {
-      setError(err.message || 'Gagal menambahkan library.');
+      setError(err.message || 'Failed to add library.');
     } finally {
       setLoading(false);
     }
@@ -54,8 +54,8 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
               <FolderPlus className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Tambah Library Baru</h2>
-              <p className="text-xs text-slate-400">Hubungkan direktori harddisk homelab Anda</p>
+              <h2 className="text-lg font-bold text-white">Add New Library</h2>
+              <p className="text-xs text-slate-400">Connect a directory from your homelab storage</p>
             </div>
           </div>
           <button
@@ -77,11 +77,11 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Nama Library
+              Library Name
             </label>
             <input
               type="text"
-              placeholder="Contoh: Anime Koleksi 1080p, Movie 4K, Drakor"
+              placeholder="e.g. Anime Collection 1080p, 4K Movies, TV Shows"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-vault-950 border border-vault-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-vault-accent"
@@ -91,31 +91,31 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Folder Path di Server
+              Server Folder Path
             </label>
             <input
               type="text"
-              placeholder="/media/anime atau /mnt/storage/movies"
+              placeholder="/media/anime or /mnt/storage/movies"
               value={path}
               onChange={(e) => setPath(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-vault-950 border border-vault-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-vault-accent font-mono text-xs"
               required
             />
             <p className="text-[11px] text-slate-500 mt-1">
-              Path absolut di server/container (misal: <code className="text-slate-400">/media/anime</code> atau <code className="text-slate-400">/mnt/hdd/anime</code>)
+              Absolute path on server/container (e.g. <code className="text-slate-400">/media/anime</code> or <code className="text-slate-400">/mnt/hdd/anime</code>)
             </p>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-              Tipe Konten
+              Content Type
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { id: 'anime', label: 'Anime Series' },
-                { id: 'movies', label: 'Movies / Film' },
+                { id: 'movies', label: 'Movies / Films' },
                 { id: 'tv', label: 'TV Shows / Series' },
-                { id: 'mixed', label: 'Campuran / General' },
+                { id: 'mixed', label: 'Mixed / General' },
               ].map((opt) => (
                 <button
                   key={opt.id}
@@ -141,14 +141,14 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
               onClick={onClose}
               className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white rounded-xl hover:bg-vault-800 transition"
             >
-              Batal
+              Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
               className="px-5 py-2 text-xs font-bold text-white bg-vault-accent hover:bg-vault-accent-hover rounded-xl shadow-lg shadow-vault-accent/20 transition disabled:opacity-50"
             >
-              {loading ? 'Menyimpan...' : 'Simpan Library'}
+              {loading ? 'Saving...' : 'Save Library'}
             </button>
           </div>
         </form>

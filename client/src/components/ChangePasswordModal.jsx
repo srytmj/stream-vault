@@ -16,11 +16,11 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (newPassword.length < 4) {
-      setError('Password baru minimal 4 karakter');
+      setError('New password must be at least 4 characters');
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Konfirmasi password tidak cocok');
+      setError('Password confirmation does not match');
       return;
     }
 
@@ -34,7 +34,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
         onClose();
       }, 1500);
     } catch (err) {
-      setError(err.message || 'Gagal mengubah password');
+      setError(err.message || 'Failed to update password');
     } finally {
       setLoading(false);
     }
@@ -49,7 +49,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
             <div className="p-2 rounded-xl bg-vault-accent/10 border border-vault-accent/20 text-vault-accent">
               <Lock className="w-5 h-5" />
             </div>
-            <h3 className="text-base font-bold text-white tracking-tight">Ganti Password Akun</h3>
+            <h3 className="text-base font-bold text-white tracking-tight">Change Account Password</h3>
           </div>
           <button
             onClick={onClose}
@@ -71,13 +71,13 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
           {success && (
             <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-xl flex items-center gap-2 text-emerald-400 text-xs font-bold">
               <Check className="w-4 h-4" />
-              <span>Password berhasil diubah!</span>
+              <span>Password updated successfully!</span>
             </div>
           )}
 
           <div>
             <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-              Password Saat Ini
+              Current Password
             </label>
             <input
               type="password"
@@ -91,7 +91,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
           <div>
             <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-              Password Baru
+              New Password
             </label>
             <input
               type="password"
@@ -105,7 +105,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
 
           <div>
             <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-              Konfirmasi Password Baru
+              Confirm New Password
             </label>
             <input
               type="password"
@@ -123,7 +123,7 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
               onClick={onClose}
               className="px-4 py-2 bg-vault-800 hover:bg-vault-700 text-slate-300 text-xs font-semibold rounded-xl transition"
             >
-              Batal
+              Cancel
             </button>
             <button
               type="submit"
@@ -133,12 +133,12 @@ export default function ChangePasswordModal({ isOpen, onClose }) {
               {loading ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Menyimpan...</span>
+                  <span>Saving...</span>
                 </>
               ) : (
                 <>
                   <Check className="w-3.5 h-3.5" />
-                  <span>Perbarui Password</span>
+                  <span>Update Password</span>
                 </>
               )}
             </button>

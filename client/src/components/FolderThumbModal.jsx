@@ -38,7 +38,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
         }
       })
       .catch((err) => {
-        setError(err.message || 'Gagal memuat konfigurasi folder');
+        setError(err.message || 'Failed to load folder configuration');
       })
       .finally(() => {
         setLoadingConfig(false);
@@ -50,12 +50,12 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      setError('Harap pilih file gambar (JPG, PNG, WebP)');
+      setError('Please select an image file (JPG, PNG, WebP)');
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setError('Ukuran file maksimal 10 MB');
+      setError('Maximum file size is 10 MB');
       return;
     }
 
@@ -76,7 +76,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
 
     try {
       if (mode === 'custom' && !selectedFile && !config?.customThumbnailUrl) {
-        throw new Error('Silakan pilih file gambar untuk mode kustom');
+        throw new Error('Please select an image file for custom mode');
       }
 
       await updateFolderThumbnail({
@@ -88,7 +88,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
       onUpdated?.();
       onClose();
     } catch (err) {
-      setError(err.message || 'Gagal menyimpan thumbnail folder');
+      setError(err.message || 'Failed to save folder thumbnail');
     } finally {
       setIsSaving(false);
     }
@@ -107,7 +107,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
             </div>
             <div>
               <h3 className="text-base font-bold text-white tracking-tight">
-                Atur Thumbnail Folder
+                Folder Thumbnail Settings
               </h3>
               <p className="text-xs text-slate-400 truncate max-w-xs" title={folder?.name}>
                 {folder?.name || folder?.subpath}
@@ -127,7 +127,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
           {loadingConfig ? (
             <div className="py-12 flex flex-col items-center justify-center text-center">
               <Loader2 className="w-8 h-8 text-vault-accent animate-spin mb-2" />
-              <p className="text-xs text-slate-400">Memeriksa video dan thumbnail folder...</p>
+              <p className="text-xs text-slate-400">Checking folder videos and thumbnails...</p>
             </div>
           ) : (
             <>
@@ -139,12 +139,12 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
               )}
 
               <p className="text-xs text-slate-400">
-                Pilih salah satu dari 3 mode thumbnail untuk folder ini:
+                Choose one of 3 thumbnail modes for this folder:
               </p>
 
               {/* 3 Modes Radio Grid */}
               <div className="space-y-3">
-                {/* MODE 1: OTOMATIS */}
+                {/* MODE 1: AUTO */}
                 <div
                   onClick={() => setMode('auto')}
                   className={`p-4 rounded-2xl border cursor-pointer transition flex items-start gap-3.5 ${
@@ -169,14 +169,14 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Mode 1: Otomatis (Ambil dari Video)</span>
+                        <span>Mode 1: Automatic (Extract from Video)</span>
                       </span>
                       <span className="text-[10px] px-2 py-0.5 bg-vault-800 rounded text-amber-400 font-semibold border border-vault-700">
-                        Rekomendasi
+                        Recommended
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mb-3">
-                      Sistem mengambil snapshot dari video yang ada di dalam folder ini secara otomatis.
+                      Automatically extracts a visual snapshot from video files inside this folder.
                     </p>
 
                     {/* Preview Mode 1 */}
@@ -190,13 +190,13 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                       </div>
                     ) : (
                       <div className="p-2.5 bg-vault-900 rounded-xl text-[11px] text-slate-500 font-mono">
-                        Tidak ada video langsung ditemukan di folder ini
+                        No direct video files found in this folder
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* MODE 2: KUSTOM UPLOAD */}
+                {/* MODE 2: CUSTOM UPLOAD */}
                 <div
                   onClick={() => setMode('custom')}
                   className={`p-4 rounded-2xl border cursor-pointer transition flex items-start gap-3.5 ${
@@ -221,11 +221,11 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         <Upload className="w-3.5 h-3.5 text-vault-accent" />
-                        <span>Mode 2: Kustom (Upload Gambar)</span>
+                        <span>Mode 2: Custom (Upload Image)</span>
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mb-3">
-                      Upload gambar sampul sendiri (format JPG, PNG, atau WebP, maks 10MB).
+                      Upload your own cover image (JPG, PNG, or WebP, max 10MB).
                     </p>
 
                     {/* File Upload Zone */}
@@ -233,10 +233,10 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                       <label className="flex flex-col items-center justify-center border-2 border-dashed border-vault-700 hover:border-vault-accent/80 rounded-xl p-4 bg-vault-950 cursor-pointer transition group">
                         <Upload className="w-5 h-5 text-slate-400 group-hover:text-vault-accent mb-1 transition" />
                         <span className="text-xs font-semibold text-slate-300 group-hover:text-white">
-                          {selectedFile ? selectedFile.name : 'Pilih File Gambar'}
+                          {selectedFile ? selectedFile.name : 'Choose Image File'}
                         </span>
                         <span className="text-[10px] text-slate-500 mt-0.5">
-                          Klik untuk upload dari perangkat Anda
+                          Click to upload from your device
                         </span>
                         <input
                           type="file"
@@ -257,9 +257,9 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                             />
                           </div>
                           <div className="text-[11px] text-slate-400 truncate">
-                            <span className="font-semibold text-white block">Preview Kustom</span>
+                            <span className="font-semibold text-white block">Custom Preview</span>
                             <span className="text-slate-500">
-                              {selectedFile ? `${Math.round(selectedFile.size / 1024)} KB` : 'Tersimpan'}
+                              {selectedFile ? `${Math.round(selectedFile.size / 1024)} KB` : 'Saved'}
                             </span>
                           </div>
                         </div>
@@ -268,7 +268,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                   </div>
                 </div>
 
-                {/* MODE 3: BIARIN KOSONG */}
+                {/* MODE 3: EMPTY */}
                 <div
                   onClick={() => setMode('none')}
                   className={`p-4 rounded-2xl border cursor-pointer transition flex items-start gap-3.5 ${
@@ -293,16 +293,16 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         <Folder className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Mode 3: Biarin Kosong (Ikon Folder Bawaan)</span>
+                        <span>Mode 3: Empty (Default Folder Icon)</span>
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mb-3">
-                      Folder tidak memakai gambar thumbnail dan akan tampil dengan ikon folder bawaan.
+                      No thumbnail artwork will be used; the folder renders with the default icon.
                     </p>
 
                     <div className="w-40 aspect-video rounded-xl bg-vault-950 border border-vault-800 flex flex-col items-center justify-center text-slate-600">
                       <Folder className="w-8 h-8 text-amber-400/40" />
-                      <span className="text-[10px] text-slate-500 mt-1">Ikon Standar</span>
+                      <span className="text-[10px] text-slate-500 mt-1">Default Icon</span>
                     </div>
                   </div>
                 </div>
@@ -319,7 +319,7 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
             disabled={isSaving}
             className="px-4 py-2 bg-vault-800 hover:bg-vault-700 text-slate-300 text-xs font-semibold rounded-xl transition"
           >
-            Batal
+            Cancel
           </button>
           <button
             type="button"
@@ -330,12 +330,12 @@ export default function FolderThumbModal({ isOpen, onClose, folder, onUpdated })
             {isSaving ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Menyimpan...</span>
+                <span>Saving...</span>
               </>
             ) : (
               <>
                 <Check className="w-3.5 h-3.5" />
-                <span>Simpan Pengaturan</span>
+                <span>Save Settings</span>
               </>
             )}
           </button>
