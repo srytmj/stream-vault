@@ -8,26 +8,25 @@
   }
 }
 
-/* Custom scrollbars */
+/* Custom scrollbars - Sleek & thin */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f111a;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #282e44;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a4260;
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Artplayer customization to blend seamlessly with StreamVault dark theme */
 .art-video-player {
-  border-radius: 0.75rem;
-  overflow: hidden;
+  border-radius: 0;
 }
 
 /* Keep art-mask transparent so it never covers the video with dark overlays */
@@ -37,14 +36,14 @@
 
 /* Use background-image so background-size (100px height at bottom) is preserved */
 .art-video-player .art-bottom {
-  background-image: linear-gradient(to top, rgba(9, 10, 15, 0.95), rgba(9, 10, 15, 0.6) 60%, transparent 100%);
+  background-image: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.6) 60%, transparent 100%);
 }
 
 .art-video-player .art-progress {
-  height: 4px;
-  transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 3px;
+  transition: height 0.2s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .art-video-player:hover .art-progress {
-  height: 6px;
+  height: 5px;
 }

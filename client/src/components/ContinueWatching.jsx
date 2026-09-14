@@ -1,6 +1,7 @@
 import React from 'react';
-import { Play, Clock, X, Sparkles } from 'lucide-react';
-import { formatDuration, formatTimeAgo } from '../utils/formatters';
+import { Play, MinusCircle } from 'lucide-react';
+import { formatDuration } from '../utils/formatters';
+import { appendAuthToken } from '../utils/api';
 
 export default function ContinueWatching({
   historyItems = [],
@@ -10,64 +11,76 @@ export default function ContinueWatching({
   if (!historyItems || historyItems.length === 0) return null;
 
   return (
-    <section className="mb-8">
-      <div className="flex items-center gap-2 mb-4">
-        <Clock className="w-4 h-4 text-vault-accent" />
-        <h2 className="text-base font-bold text-white tracking-tight">Continue Watching</h2>
-      </div>
+    <section className="mb-10 lg:mb-14">
+      <h2 className="text-xl md:text-2xl font-bold text-white mb-4 lg:mb-6 px-1">
+        Continue Watching
+      </h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
         {historyItems.map((item) => (
           <div
             key={item.id}
-            className="group relative bg-vault-900 border border-vault-800 rounded-2xl overflow-hidden hover:border-vault-accent/50 transition-all flex flex-col justify-between"
+            onClick={() => onResume(item)}
+            className="group relative bg-vault-900 rounded-md overflow-hidden cursor-pointer shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]"
           >
-            {/* Header Thumbnail / Title Area */}
-            <div className="p-4">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="min-w-0">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-vault-accent">
-                    {item.category || 'Anime'}
+            <div className="relative aspect-video w-full bg-vault-850">
+              {/* Background Image */}
+              {item.thumbnailUrl || item.posterUrl ? (
+                <img
+                  src={appendAuthToken(item.thumbnailUrl || item.posterUrl)}
+                  alt={item.title}
+                  className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity duration-300"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full bg-vault-800 flex items-center justify-center">
+                  <span className="text-slate-600 font-bold tracking-widest uppercase">
+                    No Image
                   </span>
-                  <h3 className="font-bold text-xs text-white truncate group-hover:text-vault-accent transition-colors">
-                    {item.title}
-                  </h3>
                 </div>
+              )}
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(item.id);
-                  }}
-                  className="text-slate-500 hover:text-rose-400 p-1 rounded-lg hover:bg-vault-800 transition-colors"
-                  title="Remove from history"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              {/* Gradient overlay for readability */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent" />
+
+              {/* Centered Play Button (Hover) */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <div className="w-14 h-14 rounded-full border-2 border-white/80 bg-black/40 backdrop-blur-sm flex items-center justify-center text-white">
+                  <Play className="w-7 h-7 fill-white ml-1" />
+                </div>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
-                <span>{formatDuration(item.currentTime)} / {formatDuration(item.duration)}</span>
-                <span className="text-slate-500">{formatTimeAgo(item.updatedAt)}</span>
-              </div>
-            </div>
+              {/* Remove Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(item.id);
+                }}
+                className="absolute top-3 right-3 text-white/50 hover:text-white bg-black/40 hover:bg-black/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all z-20 tooltip"
+                title="Remove from history"
+              >
+                <MinusCircle className="w-5 h-5" />
+              </button>
 
-            {/* Bottom Progress Bar & Resume Button */}
-            <div>
-              <div className="w-full bg-vault-800 h-1.5 overflow-hidden">
+              {/* Info section at bottom */}
+              <div className="absolute bottom-0 left-0 right-0 p-4">
+                <h3 className="font-bold text-white text-sm md:text-base truncate drop-shadow-md">
+                  {item.title}
+                </h3>
+                <div className="flex justify-between items-center mt-1">
+                  <span className="text-[11px] font-medium text-slate-300">
+                    {formatDuration(item.currentTime)} of {formatDuration(item.duration)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Progress Bar anchored to bottom edge */}
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20">
                 <div
-                  className="bg-vault-accent h-full transition-all duration-300"
+                  className="h-full bg-vault-accent transition-all duration-300"
                   style={{ width: `${item.progress}%` }}
                 />
               </div>
-
-              <button
-                onClick={() => onResume(item)}
-                className="w-full py-2.5 px-4 bg-vault-850 hover:bg-vault-accent text-slate-200 hover:text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                <span>Resume ({item.progress}%)</span>
-              </button>
             </div>
           </div>
         ))}

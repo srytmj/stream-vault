@@ -1,17 +1,10 @@
 import React, { useState } from 'react';
 import {
   Film,
-  Sparkles,
-  Tv,
   LayoutGrid,
   List,
   Table,
-  SlidersHorizontal,
   ArrowUpDown,
-  Search,
-  Subtitles,
-  FileVideo,
-  Play,
 } from 'lucide-react';
 import MediaCard from './MediaCard';
 import VideoThumbnail from './VideoThumbnail';
@@ -22,232 +15,169 @@ export default function MediaGrid({
   series = [],
   selectedCategory = 'all',
   searchQuery = '',
-  displayMode = 'grid', // 'grid' | 'compact' | 'details'
+  displayMode = 'grid', 
   onDisplayModeChange,
   onPlayMedia,
   onViewSeries,
 }) {
-  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'title' | 'size'
+  const [sortBy, setSortBy] = useState('newest'); 
 
-  // Filter items by category
   const filteredItems = items.filter((item) => {
-    if (selectedCategory !== 'all' && item.category !== selectedCategory) {
-      return false;
-    }
+    if (selectedCategory !== 'all' && item.category !== selectedCategory) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      return (
-        item.title.toLowerCase().includes(q) ||
-        item.filename.toLowerCase().includes(q)
-      );
+      return item.title.toLowerCase().includes(q) || item.filename.toLowerCase().includes(q);
     }
     return true;
   });
 
-  // Filter series by category
   const filteredSeries = series.filter((s) => {
-    if (selectedCategory !== 'all' && s.category !== selectedCategory) {
-      return false;
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return s.title.toLowerCase().includes(q);
-    }
+    if (selectedCategory !== 'all' && s.category !== selectedCategory) return false;
+    if (searchQuery) return s.title.toLowerCase().includes(q);
     return true;
   });
 
-  // Sort logic
   const sortFunction = (a, b) => {
-    if (sortBy === 'title') {
-      return a.title.localeCompare(b.title);
-    }
-    if (sortBy === 'size') {
-      return (b.size || 0) - (a.size || 0);
-    }
-    // Default: newest
+    if (sortBy === 'title') return a.title.localeCompare(b.title);
+    if (sortBy === 'size') return (b.size || 0) - (a.size || 0);
     return new Date(b.modifiedAt || 0) - new Date(a.modifiedAt || 0);
   };
 
   const sortedItems = [...filteredItems].sort(sortFunction);
   const sortedSeries = [...filteredSeries].sort(sortFunction);
-
   const totalCount = sortedSeries.length + sortedItems.length;
 
   return (
-    <div className="space-y-6">
-      {/* Grid Header & Explorer View Toolbar */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-vault-800">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <span>Media Catalog</span>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-vault-850 text-vault-accent border border-vault-700">
-              {totalCount} items
-            </span>
-          </h2>
-        </div>
+    <div className="space-y-10 lg:space-y-14">
+      {/* Grid Controls */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 className="text-xl md:text-2xl font-bold text-white px-1">
+          Catalog Explorer
+        </h2>
 
-        {/* View Mode Switcher (Grid, Compact, Details Table) */}
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-          <div className="flex items-center bg-vault-900 p-1 rounded-xl border border-vault-800 text-xs">
+        {/* View & Sort Controls */}
+        <div className="flex items-center gap-3 w-full sm:w-auto">
+          {/* View Modes */}
+          <div className="flex items-center bg-white/5 rounded-full p-1 ring-1 ring-white/10">
             <button
               onClick={() => onDisplayModeChange?.('grid')}
-              className={`p-1.5 rounded-lg transition ${
-                displayMode === 'grid'
-                  ? 'bg-vault-800 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+              className={`p-1.5 rounded-full transition-all ${
+                displayMode === 'grid' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
               }`}
-              title="Poster Grid (Large)"
+              title="Grid View"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={() => onDisplayModeChange?.('compact')}
-              className={`p-1.5 rounded-lg transition ${
-                displayMode === 'compact'
-                  ? 'bg-vault-800 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+              className={`p-1.5 rounded-full transition-all ${
+                displayMode === 'compact' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
               }`}
-              title="Compact Cards (Medium)"
+              title="Compact View"
             >
               <List className="w-4 h-4" />
             </button>
             <button
               onClick={() => onDisplayModeChange?.('details')}
-              className={`p-1.5 rounded-lg transition ${
-                displayMode === 'details'
-                  ? 'bg-vault-800 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+              className={`p-1.5 rounded-full transition-all ${
+                displayMode === 'details' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
               }`}
-              title="Details View (File Explorer Table)"
+              title="Table View"
             >
               <Table className="w-4 h-4" />
             </button>
           </div>
 
           {/* Sort Dropdown */}
-          <div className="flex items-center gap-1.5 bg-vault-900 px-2.5 py-1 rounded-xl border border-vault-800 text-xs text-slate-300">
+          <div className="flex items-center gap-2 bg-white/5 px-4 py-1.5 rounded-full ring-1 ring-white/10 text-sm text-slate-300">
             <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="bg-transparent text-slate-300 focus:outline-none cursor-pointer pr-1"
+              className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-2"
             >
-              <option value="newest" className="bg-vault-900">Newest</option>
-              <option value="title" className="bg-vault-900">Title A-Z</option>
-              <option value="size" className="bg-vault-900">File Size</option>
+              <option value="newest" className="bg-vault-900">Recently Added</option>
+              <option value="title" className="bg-vault-900">A-Z</option>
+              <option value="size" className="bg-vault-900">Size</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* Details View (File Explorer Table) */}
       {displayMode === 'details' ? (
-        <div className="bg-vault-900/80 border border-vault-800/80 rounded-2xl overflow-hidden shadow-xl">
+        <div className="bg-vault-900/40 rounded-xl overflow-hidden ring-1 ring-white/10">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-vault-950/80 text-slate-400 border-b border-vault-800 font-semibold uppercase tracking-wider">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-white/5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-4">Thumbnail</th>
-                  <th className="py-3 px-4">File Name / Title</th>
-                  <th className="py-3 px-3">Format</th>
-                  <th className="py-3 px-3">Size</th>
-                  <th className="py-3 px-3">Category</th>
-                  <th className="py-3 px-3">Subtitles</th>
-                  <th className="py-3 px-3">Modified</th>
-                  <th className="py-3 px-4 text-right">Action</th>
+                  <th className="py-4 px-6">Media</th>
+                  <th className="py-4 px-4">Size</th>
+                  <th className="py-4 px-4">Added</th>
+                  <th className="py-4 px-6 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-vault-800/60">
-                {sortedItems.map((item) => {
-                  const hasAss = item.subtitles?.some((s) => s.format === 'ass' || s.format === 'ssa');
-                  return (
-                    <tr
-                      key={item.id}
-                      onClick={() => onPlayMedia(item)}
-                      className="hover:bg-vault-850/60 transition cursor-pointer group"
-                    >
-                      <td className="py-2.5 px-4 w-20">
-                        <div className="w-16 aspect-video rounded-md overflow-hidden">
-                          <VideoThumbnail
-                            streamUrl={item.streamUrl}
-                            posterUrl={item.posterUrl}
-                            alt={item.title}
-                            aspectRatio="aspect-video"
-                            showPlayIcon={false}
-                          />
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-200 group-hover:text-vault-accent transition truncate max-w-[280px]">
+              <tbody className="divide-y divide-white/5">
+                {sortedItems.map((item) => (
+                  <tr
+                    key={item.id}
+                    onClick={() => onPlayMedia(item)}
+                    className="hover:bg-white/5 transition-colors cursor-pointer group"
+                  >
+                    <td className="py-3 px-6 flex items-center gap-4">
+                      <div className="w-24 aspect-video rounded-md overflow-hidden bg-vault-850 shrink-0">
+                        <VideoThumbnail
+                          streamUrl={item.streamUrl}
+                          posterUrl={item.posterUrl}
+                          alt={item.title}
+                          aspectRatio="aspect-video"
+                          showPlayIcon={false}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-slate-200 group-hover:text-white transition-colors truncate">
                           {item.title}
                         </div>
-                        <div className="text-[11px] font-mono text-slate-500 truncate max-w-[280px]">
+                        <div className="text-xs text-slate-500 font-mono mt-0.5 truncate">
                           {item.filename}
                         </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 bg-vault-950 border border-vault-800 rounded font-mono text-[10px] text-vault-accent font-bold uppercase">
-                          {item.extension?.replace('.', '')}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-slate-300">
-                        {item.sizeFormatted}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="px-2 py-0.5 bg-vault-850 rounded-full text-[10px] font-bold text-slate-300 uppercase">
-                          {item.category}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        {hasAss ? (
-                          <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded text-[10px] font-bold">
-                            ASS STYLED
-                          </span>
-                        ) : item.subtitles?.length > 0 ? (
-                          <span className="px-2 py-0.5 bg-vault-800 text-slate-300 rounded text-[10px]">
-                            {item.subtitles.length} Sub
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">
-                        {formatTimeAgo(item.modifiedAt)}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onPlayMedia(item);
-                          }}
-                          className="px-3 py-1.5 bg-vault-accent hover:bg-vault-accent-hover text-white rounded-lg font-bold transition shadow-sm"
-                        >
-                          Play
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-400 font-mono text-xs">
+                      {item.sizeFormatted}
+                    </td>
+                    <td className="py-3 px-4 text-slate-400 text-xs">
+                      {formatTimeAgo(item.modifiedAt)}
+                    </td>
+                    <td className="py-3 px-6 text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPlayMedia(item);
+                        }}
+                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition-colors text-xs"
+                      >
+                        Play
+                      </button>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       ) : (
-        /* Grid & Compact Views */
-        <div className="space-y-8">
+        <div className="space-y-12">
           {/* Series Section */}
           {sortedSeries.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <span>TV Series & Episodic Anime</span>
-                <span className="text-xs text-slate-600">({sortedSeries.length})</span>
+            <div className="space-y-4">
+              <h3 className="text-lg md:text-xl font-bold text-white px-1">
+                TV Series & Anime
               </h3>
-
               <div
-                className={`grid gap-4 ${
+                className={`grid gap-4 md:gap-6 ${
                   displayMode === 'compact'
-                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
-                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+                    ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8'
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
                 }`}
               >
                 {sortedSeries.map((s) => (
@@ -265,17 +195,15 @@ export default function MediaGrid({
 
           {/* Standalone Movies & Videos Section */}
           {sortedItems.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                <span>Standalone Movies & Videos</span>
-                <span className="text-xs text-slate-600">({sortedItems.length})</span>
+            <div className="space-y-4">
+              <h3 className="text-lg md:text-xl font-bold text-white px-1">
+                Movies & Single Videos
               </h3>
-
               <div
-                className={`grid gap-4 ${
+                className={`grid gap-4 md:gap-6 ${
                   displayMode === 'compact'
-                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
-                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+                    ? 'grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8'
+                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6'
                 }`}
               >
                 {sortedItems.map((item) => (
@@ -294,13 +222,13 @@ export default function MediaGrid({
 
       {/* Empty State */}
       {totalCount === 0 && (
-        <div className="py-20 text-center bg-vault-900/50 border border-vault-800/80 rounded-2xl">
-          <Film className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-200">No media found</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+        <div className="py-32 flex flex-col items-center justify-center text-center px-4">
+          <Film className="w-16 h-16 text-white/20 mb-4" />
+          <h3 className="text-xl font-bold text-slate-300">No media found</h3>
+          <p className="text-sm text-slate-500 mt-2 max-w-sm">
             {searchQuery
               ? `No results found for "${searchQuery}". Try a different keyword.`
-              : 'Media storage is empty or contains no supported video files (.mp4, .mkv, .webm).'}
+              : 'Media storage is empty or contains no supported format.'}
           </p>
         </div>
       )}
