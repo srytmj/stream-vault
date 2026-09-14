@@ -228,7 +228,7 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 pt-24 md:pt-28 pb-12 space-y-8">
         {/* Loading Spinner */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-28 text-center">
