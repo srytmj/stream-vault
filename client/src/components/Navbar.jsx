@@ -10,7 +10,7 @@ import {
   LogOut,
   Key,
   Shield,
-  ChevronDown,
+  Activity,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -35,7 +35,7 @@ export default function Navbar({
   const menuRef = useRef(null);
 
   const categories = [
-    { id: 'all', label: 'Home' },
+    { id: 'all', label: 'All' },
     { id: 'anime', label: 'Anime' },
     { id: 'tv', label: 'Series' },
     { id: 'movies', label: 'Movies' },
@@ -60,58 +60,67 @@ export default function Navbar({
   }, []);
 
   return (
-    <header className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrolled ? 'bg-vault-950/95 backdrop-blur-md shadow-lg shadow-black/50' : 'bg-gradient-to-b from-black/80 to-transparent'}`}>
-      <div className="px-4 md:px-8 lg:px-12 flex items-center justify-between h-16 md:h-20 gap-6">
-        
+    <header
+      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
+        scrolled
+          ? 'bg-vault-950/95 backdrop-blur-md shadow-lg shadow-black/50 border-b border-white/5'
+          : 'bg-gradient-to-b from-black/90 via-black/50 to-transparent'
+      }`}
+    >
+      <div className="px-4 md:px-8 lg:px-12 flex items-center justify-between h-16 md:h-20 gap-4 md:gap-6">
         {/* Left: Brand & Navigation */}
-        <div className="flex items-center gap-8 md:gap-12">
+        <div className="flex items-center gap-4 sm:gap-8 md:gap-10">
           {/* Brand Logo */}
-          <a href="#" className="flex items-center gap-2 group shrink-0">
-            <div className="bg-vault-accent rounded-full p-1.5 flex items-center justify-center">
-              <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+          <button
+            onClick={() => setActiveTab?.('catalog')}
+            className="flex items-center gap-2.5 group shrink-0 focus:outline-none text-left"
+          >
+            <div className="w-8 h-8 md:w-9 md:h-9 bg-vault-accent rounded-xl flex items-center justify-center shadow-lg shadow-vault-accent/30 group-hover:scale-105 transition-transform">
+              <Play className="w-4 h-4 md:w-5 md:h-5 text-white fill-white ml-0.5" />
             </div>
-            <span className="font-black text-xl md:text-2xl tracking-tight text-white hidden sm:block">
-              StreamVault
+            <span className="font-extrabold text-lg md:text-xl tracking-tight text-white">
+              Stream<span className="text-vault-accent">Vault</span>
             </span>
-          </a>
+          </button>
 
-          {/* Primary Nav Links */}
-          <nav className="hidden md:flex items-center gap-6">
+          {/* Primary Nav Links (Desktop & Tablet) */}
+          <nav className="flex items-center gap-1 sm:gap-2 bg-white/5 p-1 rounded-xl border border-white/10 text-xs font-semibold">
             <button
               onClick={() => setActiveTab?.('catalog')}
-              className={`text-sm font-medium transition-colors hover:text-white ${activeTab === 'catalog' ? 'text-white' : 'text-slate-300'}`}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'catalog'
+                  ? 'bg-vault-accent text-white shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
             >
               Catalog
             </button>
             <button
               onClick={() => setActiveTab?.('explorer')}
-              className={`text-sm font-medium transition-colors hover:text-white ${activeTab === 'explorer' ? 'text-white' : 'text-slate-300'}`}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'explorer'
+                  ? 'bg-vault-accent text-white shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
             >
-              Files
-            </button>
-            <button
-              onClick={onOpenStats}
-              className="text-sm font-medium text-slate-300 hover:text-white transition-colors"
-            >
-              Diagnostics
+              Folders
             </button>
           </nav>
         </div>
 
-        {/* Right: Search & User Controls */}
-        <div className="flex items-center gap-4 md:gap-6 flex-1 justify-end">
-          
-          {/* Category Tabs (Catalog Only) */}
+        {/* Right: Search, Categories & Controls */}
+        <div className="flex items-center gap-3 md:gap-4 flex-1 justify-end">
+          {/* Category Tabs (Catalog View Desktop) */}
           {activeTab === 'catalog' && (
             <div className="hidden lg:flex items-center gap-1">
               {categories.map((cat) => (
                 <button
                   key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-full transition-all ${
+                  onClick={() => setSelectedCategory?.(cat.id)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all ${
                     selectedCategory === cat.id
-                      ? 'bg-white/10 text-white font-semibold'
-                      : 'text-slate-300 hover:text-white'
+                      ? 'bg-white/15 text-white border border-white/20'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
                   {cat.label}
@@ -120,51 +129,56 @@ export default function Navbar({
             </div>
           )}
 
-          {/* Flexible Space */}
-          <div className="flex-1 lg:hidden"></div>
-
           {/* Add Library Button (Explorer) */}
           {activeTab === 'explorer' && (
             <button
               onClick={onOpenAddLibrary}
-              className="hidden md:flex items-center gap-2 px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-full text-sm font-medium transition-all"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-xl text-xs font-semibold transition-all"
             >
-              <FolderPlus className="w-4 h-4" />
+              <FolderPlus className="w-3.5 h-3.5" />
               <span>Add Source</span>
             </button>
           )}
 
           {/* Search Bar */}
           {activeTab === 'catalog' && (
-            <div className="relative group max-w-[200px] sm:max-w-xs w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-white transition-colors" />
+            <div className="relative group max-w-[170px] sm:max-w-xs w-full">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-white transition-colors" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-black/40 border border-white/20 focus:border-white focus:bg-black/60 rounded-full py-1.5 pl-9 pr-4 text-sm text-white placeholder-slate-400 focus:outline-none transition-all duration-300"
+                className="w-full bg-black/40 border border-white/15 focus:border-vault-accent/60 focus:bg-black/60 rounded-xl py-1.5 pl-8 pr-3 text-xs text-white placeholder-slate-400 focus:outline-none transition-all"
               />
             </div>
           )}
 
           {/* Utility Actions */}
-          <div className="flex items-center gap-3 border-l border-white/15 pl-4 md:pl-6">
+          <div className="flex items-center gap-2 border-l border-white/10 pl-3">
             <button
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="text-slate-300 hover:text-white transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
               title="Rescan media directory"
             >
-              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin text-vault-accent' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-vault-accent' : ''}`} />
+            </button>
+
+            <button
+              onClick={onOpenStats}
+              className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5 hidden sm:block"
+              title="Server Stats & Performance"
+            >
+              <Activity className="w-4 h-4" />
             </button>
 
             <button
               onClick={onOpenShortcuts}
-              className="text-slate-300 hover:text-white transition-colors hidden sm:block"
+              className="p-1.5 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-white/5 hidden md:block"
               title="Keyboard Shortcuts"
             >
-              <Keyboard className="w-5 h-5" />
+              <Keyboard className="w-4 h-4" />
             </button>
 
             {/* User Account Menu */}
@@ -172,25 +186,25 @@ export default function Navbar({
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="w-8 h-8 rounded-full bg-vault-accent/20 border border-vault-accent/50 flex items-center justify-center transition-transform hover:scale-105"
+                  className="w-8 h-8 rounded-xl bg-vault-accent/20 border border-vault-accent/40 flex items-center justify-center transition-transform hover:scale-105"
                   title="User Account"
                 >
-                  <span className="font-bold text-vault-accent text-sm uppercase">
+                  <span className="font-bold text-vault-accent text-xs uppercase">
                     {user.username ? user.username[0] : 'U'}
                   </span>
                 </button>
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 mt-3 w-56 bg-vault-900 border border-vault-800 rounded-md shadow-2xl py-1 z-50">
-                    <div className="px-4 py-3 border-b border-vault-800">
-                      <p className="text-sm font-semibold text-white truncate">
+                  <div className="absolute right-0 mt-2 w-52 bg-vault-900 border border-white/10 rounded-xl shadow-2xl py-1 z-50">
+                    <div className="px-4 py-2.5 border-b border-white/10">
+                      <p className="text-xs font-bold text-white truncate">
                         {user.displayName || user.username}
                       </p>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div className="flex items-center gap-1.5 mt-0.5">
                         <Shield className="w-3 h-3 text-vault-accent" />
-                        <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">
-                          {user.role} {user.authProvider ? `• ${user.authProvider}` : ''}
+                        <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+                          {user.role}
                         </span>
                       </div>
                     </div>
@@ -199,11 +213,21 @@ export default function Navbar({
                       <button
                         onClick={() => {
                           setUserMenuOpen(false);
+                          onOpenStats?.();
+                        }}
+                        className="w-full px-4 py-2 text-left text-xs text-slate-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2.5 sm:hidden"
+                      >
+                        <Activity className="w-3.5 h-3.5" />
+                        Diagnostics
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUserMenuOpen(false);
                           onOpenChangePassword?.();
                         }}
-                        className="w-full px-4 py-2.5 text-left text-sm text-slate-300 hover:text-white hover:bg-vault-800 transition-colors flex items-center gap-3"
+                        className="w-full px-4 py-2 text-left text-xs text-slate-300 hover:text-white hover:bg-white/5 transition-colors flex items-center gap-2.5"
                       >
-                        <Key className="w-4 h-4" />
+                        <Key className="w-3.5 h-3.5" />
                         Account Settings
                       </button>
                       <button
@@ -211,9 +235,9 @@ export default function Navbar({
                           setUserMenuOpen(false);
                           logout();
                         }}
-                        className="w-full px-4 py-2.5 text-left text-sm text-slate-300 hover:text-white hover:bg-vault-800 transition-colors flex items-center gap-3"
+                        className="w-full px-4 py-2 text-left text-xs text-rose-400 hover:text-rose-300 hover:bg-white/5 transition-colors flex items-center gap-2.5"
                       >
-                        <LogOut className="w-4 h-4" />
+                        <LogOut className="w-3.5 h-3.5" />
                         Sign Out
                       </button>
                     </div>

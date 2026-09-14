@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Film, Play, Sparkles } from 'lucide-react';
+import { Film, Play } from 'lucide-react';
 import { appendAuthToken } from '../utils/api';
 
-// In-memory cache for client-side generated video frame thumbnails
+// In-memory cache for client-side generated video frame thumbnails & resolved images
 const thumbnailCache = new Map();
 
 export default function VideoThumbnail({
@@ -16,33 +16,79 @@ export default function VideoThumbnail({
 }) {
   const effectiveServerThumb = posterUrl || thumbnailUrl;
 
+  const [isVisible, setIsVisible] = useState(false);
   const [thumbSrc, setThumbSrc] = useState(() => {
-    if (effectiveServerThumb) return appendAuthToken(effectiveServerThumb);
-    if (streamUrl && thumbnailCache.has(streamUrl)) {
-      return thumbnailCache.get(streamUrl);
+    const key = effectiveServerThumb || streamUrl;
+    if (key && thumbnailCache.has(key)) {
+      return thumbnailCache.get(key);
     }
     return null;
   });
-
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasError, setHasError] = useState(false);
+
+  const containerRef = useRef(null);
   const videoRef = useRef(null);
 
+  // Intersection Observer for viewport lazy loading
   useEffect(() => {
+    if (isVisible) return;
+
+    const el = containerRef.current;
+    if (!el) return;
+
+    // If already cached, mark visible immediately
+    const key = effectiveServerThumb || streamUrl;
+    if (key && thumbnailCache.has(key)) {
+      setIsVisible(true);
+      return;
+    }
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '250px' }
+    );
+
+    observer.observe(el);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isVisible, effectiveServerThumb, streamUrl]);
+
+  // Load thumbnail when visible
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const key = effectiveServerThumb || streamUrl;
+    if (key && thumbnailCache.has(key)) {
+      setThumbSrc(thumbnailCache.get(key));
+      setHasError(false);
+      return;
+    }
+
     if (effectiveServerThumb) {
-      setThumbSrc(appendAuthToken(effectiveServerThumb));
+      const fullUrl = appendAuthToken(effectiveServerThumb);
+      setThumbSrc(fullUrl);
+      thumbnailCache.set(key, fullUrl);
       setHasError(false);
       return;
     }
 
     if (!streamUrl) return;
 
-    if (thumbnailCache.has(streamUrl)) {
-      setThumbSrc(thumbnailCache.get(streamUrl));
-      return;
-    }
-
-    // Generate snapshot client-side from initial video chunk
+    // Fast client-side snapshot from HTML5 video element (0% server CPU)
     let isCancelled = false;
     setIsGenerating(true);
 
@@ -55,7 +101,6 @@ export default function VideoThumbnail({
     video.src = appendAuthToken(streamUrl);
 
     const onLoadedMetadata = () => {
-      // Seek to 2 seconds or 5% into video
       const targetTime = Math.min(2, Math.max(0.5, (video.duration || 10) * 0.05));
       video.currentTime = targetTime;
     };
@@ -64,7 +109,7 @@ export default function VideoThumbnail({
       if (isCancelled) return;
       try {
         const canvas = document.createElement('canvas');
-        const maxDim = 480;
+        const maxDim = 360;
         const scale = Math.min(1, maxDim / Math.max(video.videoWidth || 640, video.videoHeight || 360));
         canvas.width = (video.videoWidth || 640) * scale;
         canvas.height = (video.videoHeight || 360) * scale;
@@ -79,7 +124,7 @@ export default function VideoThumbnail({
             setIsGenerating(false);
           }
         }
-      } catch (err) {
+      } catch {
         if (!isCancelled) {
           setIsGenerating(false);
           setHasError(true);
@@ -109,23 +154,28 @@ export default function VideoThumbnail({
     video.addEventListener('seeked', onSeeked);
     video.addEventListener('error', onError);
 
-    // Timeout safeguard (3.5s max to avoid hanging)
     const timer = setTimeout(() => {
       if (isGenerating && !thumbSrc) {
         cleanup();
-        if (!isCancelled) setIsGenerating(false);
+        if (!isCancelled) {
+          setIsGenerating(false);
+          setHasError(true);
+        }
       }
-    }, 3500);
+    }, 4000);
 
     return () => {
       isCancelled = true;
       clearTimeout(timer);
       cleanup();
     };
-  }, [streamUrl, effectiveServerThumb]);
+  }, [isVisible, effectiveServerThumb, streamUrl]);
 
   return (
-    <div className={`relative overflow-hidden bg-vault-900 flex items-center justify-center group ${aspectRatio} ${className}`}>
+    <div
+      ref={containerRef}
+      className={`relative overflow-hidden bg-vault-900 flex items-center justify-center group ${aspectRatio} ${className}`}
+    >
       {thumbSrc && !hasError ? (
         <img
           src={thumbSrc}
@@ -135,12 +185,12 @@ export default function VideoThumbnail({
           loading="lazy"
         />
       ) : (
-        /* Dynamic Placeholder when no artwork is present */
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-vault-950 via-vault-900 to-vault-850 p-4 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-vault-800/80 border border-vault-700/80 flex items-center justify-center text-vault-accent shadow-inner group-hover:scale-110 transition-transform">
-            <Film className="w-6 h-6" />
+        /* Sleek Jellyfin-style minimal fallback */
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-[#0b0e14] via-[#141922] to-[#1c2330] p-4 text-center">
+          <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 group-hover:text-vault-accent group-hover:scale-110 transition-all">
+            <Film className="w-5 h-5" />
           </div>
-          <span className="text-[10px] font-mono text-slate-500 mt-2 line-clamp-1 max-w-[80%]">
+          <span className="text-[10px] font-medium text-slate-400 mt-2 line-clamp-1 max-w-[85%]">
             {alt}
           </span>
         </div>

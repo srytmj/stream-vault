@@ -148,7 +148,9 @@ export function findFirstVideoInFolder(folderFullPath, maxDepth = 3, currentDept
  * Resolve the thumbnail/poster URL for a folder according to the 3 modes:
  * Mode 1 ('auto'):
  *   - Use explicit folder poster (poster.jpg/poster.svg/cover.jpg) if present
- *   - Otherwise pick a video inside the folder and use its thumbnail!
+ *   - If companion poster exists for first video, use it
+ *   - If already cached thumbnail exists on disk, use it
+ *   - Otherwise return null (displays clean modern folder icon, zero CPU spike!)
  * Mode 2 ('custom'):
  *   - Use user's uploaded custom image
  * Mode 3 ('none'):
@@ -172,7 +174,7 @@ export function resolveFolderPoster(folderFullPath, folderRelPath) {
   }
 
   // Mode 1: Auto (Default)
-  // Check standard folder poster: poster.*, cover.*, folder.*, thumb.*
+  // Check standard folder poster: poster.*, cover.*, folder.*, thumb.*, artwork.*
   const standardNames = ['poster', 'cover', 'folder', 'thumb', 'artwork'];
   try {
     if (fs.existsSync(folderFullPath)) {
@@ -190,18 +192,36 @@ export function resolveFolderPoster(folderFullPath, folderRelPath) {
     }
   } catch {}
 
-  // Fallback in auto mode: pick any video inside this folder
+  // Non-blocking fallback for subfolder cards:
+  // Only use video thumbnail if it's already an exact companion image or already in disk cache
   const firstVideo = findFirstVideoInFolder(folderFullPath);
   if (firstVideo) {
-    const relVideo = path.relative(config.MEDIA_ROOT, firstVideo);
-    return `/api/thumbnail?path=${encodeURIComponent(relVideo.replace(/\\/g, '/'))}`;
+    const companion = findExactCompanionPoster(firstVideo);
+    if (companion) {
+      const relPoster = path.relative(config.MEDIA_ROOT, companion);
+      return `/api/poster?path=${encodeURIComponent(relPoster.replace(/\\/g, '/'))}`;
+    }
+
+    try {
+      const stat = fs.statSync(firstVideo);
+      const hash = crypto
+        .createHash('sha256')
+        .update(`${firstVideo}-${stat.size}-${stat.mtimeMs}`)
+        .digest('hex');
+      const jpgCacheFile = path.join(config.THUMBNAILS_DIR, `${hash}.jpg`);
+      if (fs.existsSync(jpgCacheFile) && fs.statSync(jpgCacheFile).size > 100) {
+        const relVideo = path.relative(config.MEDIA_ROOT, firstVideo);
+        return `/api/thumbnail?path=${encodeURIComponent(relVideo.replace(/\\/g, '/'))}`;
+      }
+    } catch {}
   }
 
   return null;
 }
 
 /**
- * Generate or get cached video frame thumbnail using guarded single-thread FFmpeg queue
+ * Generate or get cached video frame thumbnail using guarded single-thread FFmpeg queue.
+ * Optimized with fast keyframe seek (-noaccurate_seek) and fast_bilinear scaler to eliminate CPU spikes.
  */
 export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:00:03') {
   ensureDirs();
@@ -258,13 +278,12 @@ export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:
             return;
           }
 
-          // Resource-safe FFmpeg flags:
-          // -nostdin: prevents stdin lock
+          // Ultra-fast, low CPU FFmpeg parameters:
+          // -noaccurate_seek: skips packet decoding up to keyframe (100x faster than accurate decoding)
           // -threads 1: restricts memory and thread explosion
-          // -an: disables audio decoding & buffering
-          // -sn: disables subtitle and embedded font attachment demuxing!
-          // -dn: disables data streams
-          // -loglevel error: silences verbose stderr
+          // -an, -sn, -dn: zero audio/subtitles/data demuxing
+          // -vf scale=360:-1:flags=fast_bilinear: extremely fast bilinear software scaler
+          // -q:v 4: crisp quality with minimal CPU encoding cycles
           const args = [
             '-nostdin',
             '-threads', '1',
@@ -272,11 +291,12 @@ export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:
             '-sn',
             '-dn',
             '-loglevel', 'error',
+            '-noaccurate_seek',
             '-ss', seekTime,
             '-i', videoFullPath,
             '-frames:v', '1',
-            '-q:v', '2',
-            '-vf', 'scale=480:-1',
+            '-q:v', '4',
+            '-vf', 'scale=360:-1:flags=fast_bilinear',
             jpgCacheFile,
             '-y',
           ];
@@ -288,7 +308,7 @@ export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:
               maxBuffer: 1024 * 1024,
             });
           } catch (firstErr) {
-            // Fallback retry at 1s in case video is short (< 3s)
+            // Fallback retry at 1s with fast seek in case video is short (< 3s)
             const fallbackArgs = [
               '-nostdin',
               '-threads', '1',
@@ -296,11 +316,12 @@ export async function getOrGenerateVideoThumbnail(videoFullPath, seekTime = '00:
               '-sn',
               '-dn',
               '-loglevel', 'error',
+              '-noaccurate_seek',
               '-ss', '00:00:01',
               '-i', videoFullPath,
               '-frames:v', '1',
-              '-q:v', '2',
-              '-vf', 'scale=480:-1',
+              '-q:v', '4',
+              '-vf', 'scale=360:-1:flags=fast_bilinear',
               jpgCacheFile,
               '-y',
             ];
@@ -351,22 +372,21 @@ function generateSvgThumbnail(filename) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 270" width="480" height="270">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f111a" />
-      <stop offset="100%" stop-color="#1a1f36" />
+      <stop offset="0%" stop-color="#0b0e14" />
+      <stop offset="100%" stop-color="#161b22" />
     </linearGradient>
     <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f47521" />
-      <stop offset="100%" stop-color="#ff934b" />
+      <stop offset="0%" stop-color="#00a4dc" />
+      <stop offset="100%" stop-color="#0072a3" />
     </linearGradient>
   </defs>
   <rect width="480" height="270" fill="url(#bg)" />
-  <circle cx="240" cy="115" r="38" fill="url(#accent)" opacity="0.15" />
-  <circle cx="240" cy="115" r="30" fill="url(#accent)" opacity="0.25" />
-  <polygon points="232,100 256,115 232,130" fill="#f47521" />
-  <text x="240" y="195" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#e2e8f0" text-anchor="middle">
-    ${escapeXml(cleanName.slice(0, 45))}
+  <circle cx="240" cy="115" r="34" fill="url(#accent)" opacity="0.2" />
+  <polygon points="234,103 252,115 234,127" fill="#00a4dc" />
+  <text x="240" y="195" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="middle">
+    ${escapeXml(cleanName.slice(0, 42))}
   </text>
-  <text x="240" y="222" font-family="monospace" font-size="10" fill="#64748b" text-anchor="middle">
+  <text x="240" y="220" font-family="monospace" font-size="10" fill="#7d8590" text-anchor="middle">
     StreamVault Direct Play
   </text>
 </svg>`;

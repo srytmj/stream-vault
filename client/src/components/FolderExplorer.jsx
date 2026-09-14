@@ -15,8 +15,6 @@ import {
   Grid,
   List,
   Table,
-  Sliders,
-  Sparkles,
   Image as ImageIcon,
 } from 'lucide-react';
 import { browseLibraryFolder, appendAuthToken } from '../utils/api';
@@ -26,10 +24,12 @@ import FolderThumbModal from './FolderThumbModal';
 
 export default function FolderExplorer({
   library,
+  initialSubpath = '',
+  onNavigate,
   onSelectVideo,
   onBackToLibraries,
 }) {
-  const [currentSubpath, setCurrentSubpath] = useState('');
+  const [currentSubpath, setCurrentSubpath] = useState(initialSubpath || '');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,7 +43,7 @@ export default function FolderExplorer({
     localStorage.setItem('sv_folder_view_mode', mode);
   };
 
-  async function loadFolder(subpath = '') {
+  async function loadFolder(subpath = '', syncUrl = true) {
     if (!library) return;
     setLoading(true);
     setError(null);
@@ -51,6 +51,9 @@ export default function FolderExplorer({
       const res = await browseLibraryFolder(library.id, subpath);
       setData(res);
       setCurrentSubpath(subpath);
+      if (syncUrl && onNavigate) {
+        onNavigate(subpath);
+      }
     } catch (err) {
       setError(err.message || 'Failed to open folder');
     } finally {
@@ -59,8 +62,14 @@ export default function FolderExplorer({
   }
 
   useEffect(() => {
-    loadFolder('');
+    loadFolder(initialSubpath || '', false);
   }, [library?.id]);
+
+  useEffect(() => {
+    if (initialSubpath !== undefined && initialSubpath !== currentSubpath) {
+      loadFolder(initialSubpath, false);
+    }
+  }, [initialSubpath]);
 
   function handleNavigateUp() {
     if (!currentSubpath) {
@@ -69,7 +78,7 @@ export default function FolderExplorer({
     }
     const parts = currentSubpath.split('/').filter(Boolean);
     parts.pop();
-    loadFolder(parts.join('/'));
+    loadFolder(parts.join('/'), true);
   }
 
   // Current folder display name
@@ -80,13 +89,13 @@ export default function FolderExplorer({
   return (
     <div className="space-y-6">
       {/* Explorer Top Navigation & Breadcrumbs Bar */}
-      <div className="bg-vault-900 border border-vault-800/80 rounded-2xl p-4 shadow-lg">
+      <div className="bg-vault-900 border border-white/10 rounded-2xl p-4 shadow-lg backdrop-blur-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Breadcrumb Trail */}
           <div className="flex items-center flex-wrap gap-1.5 text-sm">
             <button
               onClick={onBackToLibraries}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-vault-800 hover:bg-vault-700 text-slate-300 hover:text-white rounded-lg transition font-medium text-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl transition font-medium text-xs border border-white/10"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>All Libraries</span>
@@ -95,11 +104,11 @@ export default function FolderExplorer({
             <ChevronRight className="w-4 h-4 text-slate-600" />
 
             <button
-              onClick={() => loadFolder('')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+              onClick={() => loadFolder('', true)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
                 !currentSubpath
-                  ? 'bg-vault-accent text-white shadow'
-                  : 'text-slate-300 hover:bg-vault-800'
+                  ? 'bg-vault-accent text-white shadow-md shadow-vault-accent/30'
+                  : 'text-slate-300 hover:bg-white/10'
               }`}
             >
               {library?.name || 'Library'}
@@ -111,11 +120,11 @@ export default function FolderExplorer({
                 <React.Fragment key={crumb.subpath}>
                   <ChevronRight className="w-4 h-4 text-slate-600" />
                   <button
-                    onClick={() => loadFolder(crumb.subpath)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition truncate max-w-[180px] ${
+                    onClick={() => loadFolder(crumb.subpath, true)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition truncate max-w-[180px] ${
                       isLast
-                        ? 'bg-vault-accent/20 text-vault-accent border border-vault-accent/30'
-                        : 'text-slate-300 hover:bg-vault-800'
+                        ? 'bg-vault-accent/20 text-vault-accent border border-vault-accent/40 shadow-sm'
+                        : 'text-slate-300 hover:bg-white/10'
                     }`}
                   >
                     {crumb.name}
@@ -127,7 +136,7 @@ export default function FolderExplorer({
 
           {/* Quick Actions, View Switcher & Folder Settings */}
           <div className="flex items-center gap-2">
-            {/* Button to configure thumbnail of currently open folder */}
+            {/* Configure thumbnail of currently open folder */}
             <button
               onClick={() =>
                 setConfigFolder({
@@ -135,23 +144,23 @@ export default function FolderExplorer({
                   subpath: currentSubpath,
                 })
               }
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-vault-850 hover:bg-vault-800 border border-vault-750 text-xs font-semibold text-slate-300 hover:text-white rounded-xl transition"
-              title="Configure Folder Cover / Thumbnail (3 Modes)"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 hover:text-white rounded-xl transition"
+              title="Folder Poster Configuration"
             >
-              <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Folder Thumbnail</span>
+              <ImageIcon className="w-3.5 h-3.5 text-vault-accent" />
+              <span className="hidden sm:inline">Cover Settings</span>
             </button>
 
             {/* View switcher */}
-            <div className="flex items-center bg-vault-950 p-1 rounded-xl border border-vault-800 text-xs">
+            <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 text-xs">
               <button
                 onClick={() => handleViewModeChange('grid')}
                 className={`p-1.5 rounded-lg transition ${
                   folderViewMode === 'grid'
-                    ? 'bg-vault-800 text-white shadow'
+                    ? 'bg-white/15 text-white shadow'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Thumbnail Grid View"
+                title="Grid View"
               >
                 <Grid className="w-4 h-4" />
               </button>
@@ -159,10 +168,10 @@ export default function FolderExplorer({
                 onClick={() => handleViewModeChange('compact')}
                 className={`p-1.5 rounded-lg transition ${
                   folderViewMode === 'compact'
-                    ? 'bg-vault-800 text-white shadow'
+                    ? 'bg-white/15 text-white shadow'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Compact List View"
+                title="List View"
               >
                 <List className="w-4 h-4" />
               </button>
@@ -170,19 +179,19 @@ export default function FolderExplorer({
                 onClick={() => handleViewModeChange('details')}
                 className={`p-1.5 rounded-lg transition ${
                   folderViewMode === 'details'
-                    ? 'bg-vault-800 text-white shadow'
+                    ? 'bg-white/15 text-white shadow'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Details Table View"
+                title="Details Table"
               >
                 <Table className="w-4 h-4" />
               </button>
             </div>
 
             <button
-              onClick={() => loadFolder(currentSubpath)}
+              onClick={() => loadFolder(currentSubpath, false)}
               disabled={loading}
-              className="p-2 text-slate-400 hover:text-white bg-vault-950 border border-vault-800 hover:border-vault-700 rounded-xl transition disabled:opacity-50"
+              className="p-2 text-slate-400 hover:text-white bg-white/5 border border-white/10 hover:border-white/20 rounded-xl transition disabled:opacity-50"
               title="Refresh Folder"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-vault-accent' : ''}`} />
@@ -193,9 +202,9 @@ export default function FolderExplorer({
 
       {/* Loading State */}
       {loading && (
-        <div className="flex flex-col items-center justify-center py-20">
+        <div className="flex flex-col items-center justify-center py-24">
           <Loader2 className="w-10 h-10 text-vault-accent animate-spin mb-3" />
-          <p className="text-sm text-slate-400">Reading directory content and thumbnails...</p>
+          <p className="text-sm text-slate-400">Loading folder contents...</p>
         </div>
       )}
 
@@ -204,10 +213,10 @@ export default function FolderExplorer({
         <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
           <p className="text-red-400 font-medium mb-3 text-sm">{error}</p>
           <button
-            onClick={() => loadFolder('')}
+            onClick={() => loadFolder('', true)}
             className="px-4 py-2 bg-vault-800 hover:bg-vault-700 text-white rounded-xl text-xs font-medium transition"
           >
-            Back to Root Library
+            Back to Library Root
           </button>
         </div>
       )}
@@ -215,30 +224,27 @@ export default function FolderExplorer({
       {/* Content View */}
       {!loading && !error && data && (
         <div className="space-y-8">
-          {/* Subfolders Section with Visual Poster Cards */}
+          {/* Subfolders Section */}
           {data.folders.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3.5">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <FolderOpen className="w-4 h-4 text-amber-400" />
+                  <FolderOpen className="w-4 h-4 text-vault-accent" />
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Directories & Folders ({data.folders.length})
+                    Folders ({data.folders.length})
                   </h3>
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  Click the image icon on a card to customize thumbnail mode
-                </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {data.folders.map((folder) => (
                   <div
                     key={folder.subpath}
-                    onClick={() => loadFolder(folder.subpath)}
-                    className="group relative flex flex-col bg-vault-900 border border-vault-800 hover:border-amber-400/60 rounded-2xl text-left transition hover:scale-[1.02] shadow-sm hover:shadow-xl overflow-hidden cursor-pointer"
+                    onClick={() => loadFolder(folder.subpath, true)}
+                    className="group flex flex-col cursor-pointer text-left transition-all"
                   >
-                    {/* Folder Artwork or Icon Banner */}
-                    <div className="aspect-[16/10] w-full bg-vault-950 relative overflow-hidden flex items-center justify-center">
+                    {/* Folder Artwork or Modern Folder Graphic */}
+                    <div className="aspect-[16/10] w-full bg-vault-900 border border-white/10 group-hover:border-vault-accent/60 rounded-xl relative overflow-hidden flex items-center justify-center shadow-md group-hover:shadow-xl transition-all duration-300">
                       {folder.posterUrl ? (
                         <img
                           src={appendAuthToken(folder.posterUrl)}
@@ -247,14 +253,14 @@ export default function FolderExplorer({
                           loading="lazy"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-tr from-vault-950 via-vault-900 to-vault-850">
-                          <Folder className="w-12 h-12 text-amber-400/40 group-hover:scale-110 transition" />
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-tr from-[#0b0e14] via-[#141922] to-[#1a2332]">
+                          <Folder className="w-12 h-12 text-slate-500 group-hover:text-vault-accent group-hover:scale-110 transition duration-300" />
                         </div>
                       )}
 
-                      {/* Folder Icon Overlay Badge */}
-                      <div className="absolute top-2 left-2 p-1.5 rounded-lg bg-vault-950/80 backdrop-blur-md border border-vault-700 text-amber-400">
-                        <Folder className="w-3.5 h-3.5 fill-amber-400/30" />
+                      {/* Folder Icon Badge */}
+                      <div className="absolute top-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-vault-accent">
+                        <Folder className="w-3.5 h-3.5" />
                       </div>
 
                       {/* Quick Edit Thumbnail Button */}
@@ -264,31 +270,28 @@ export default function FolderExplorer({
                           e.stopPropagation();
                           setConfigFolder(folder);
                         }}
-                        className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-vault-950/80 hover:bg-vault-800 text-slate-300 hover:text-white border border-vault-700 backdrop-blur-md transition shadow opacity-0 group-hover:opacity-100"
-                        title="Configure Folder Cover / Thumbnail"
+                        className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-black/70 hover:bg-vault-accent text-slate-300 hover:text-white border border-white/10 backdrop-blur-md transition shadow opacity-0 group-hover:opacity-100"
+                        title="Configure Folder Cover"
                       >
-                        <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                        <ImageIcon className="w-3.5 h-3.5" />
                       </button>
 
                       {folder.childCount > 0 && (
-                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-vault-950/80 backdrop-blur-md border border-vault-700 text-[10px] font-mono font-bold text-slate-300">
+                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300">
                           {folder.childCount} items
                         </div>
                       )}
                     </div>
 
-                    <div className="p-3">
+                    <div className="mt-2.5 px-0.5">
                       <span
-                        className="text-xs font-bold text-slate-200 group-hover:text-amber-400 truncate block transition"
+                        className="text-sm font-semibold text-slate-200 group-hover:text-vault-accent truncate block transition"
                         title={folder.name}
                       >
                         {folder.name}
                       </span>
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
-                        <span>{folder.hasVideos ? 'Video Collection' : 'Empty Folder'}</span>
-                        <span className="font-mono uppercase text-[9px] px-1 rounded bg-vault-950 border border-vault-800">
-                          {folder.thumbnailMode || 'auto'}
-                        </span>
+                      <div className="text-[11px] text-slate-400 mt-0.5">
+                        {folder.hasVideos ? 'Media Collection' : 'Directory'}
                       </div>
                     </div>
                   </div>
@@ -300,15 +303,15 @@ export default function FolderExplorer({
           {/* Video Files Section */}
           {data.files.length > 0 && (
             <div>
-              <div className="flex items-center justify-between mb-3.5">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Film className="w-4 h-4 text-vault-accent" />
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                    Ready-to-Play Video Files ({data.files.length})
+                    Videos & Episodes ({data.files.length})
                   </h3>
                 </div>
                 <span className="text-xs text-slate-400">
-                  Unique Video Thumbnails &bull; 0% Transcode
+                  Direct Play
                 </span>
               </div>
 
@@ -321,42 +324,39 @@ export default function FolderExplorer({
                       <div
                         key={file.id}
                         onClick={() => onSelectVideo(file)}
-                        className="group flex flex-col bg-vault-900 border border-vault-800 hover:border-vault-accent/50 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-sm hover:shadow-xl overflow-hidden"
+                        className="group flex flex-col cursor-pointer text-left transition-all"
                       >
-                        {/* 16:9 Visual Video Thumbnail with server generation */}
-                        <VideoThumbnail
-                          streamUrl={file.streamUrl}
-                          posterUrl={file.posterUrl}
-                          thumbnailUrl={file.thumbnailUrl}
-                          alt={file.title || file.filename}
-                          aspectRatio="aspect-video"
-                        />
+                        <div className="relative w-full rounded-xl overflow-hidden bg-vault-900 border border-white/10 group-hover:border-vault-accent/60 aspect-video shadow-md group-hover:shadow-xl transition-all duration-300">
+                          <VideoThumbnail
+                            streamUrl={file.streamUrl}
+                            posterUrl={file.posterUrl}
+                            thumbnailUrl={file.thumbnailUrl}
+                            alt={file.title || file.filename}
+                            aspectRatio="aspect-video"
+                          />
+                        </div>
 
-                        {/* Video Metadata Card Body */}
-                        <div className="p-3.5 flex flex-col flex-1">
+                        <div className="mt-2.5 px-0.5">
                           <h4
-                            className="text-xs font-bold text-slate-200 group-hover:text-vault-accent line-clamp-1 transition mb-1"
+                            className="text-sm font-semibold text-slate-200 group-hover:text-vault-accent line-clamp-1 transition mb-0.5"
                             title={file.filename}
                           >
                             {file.title || file.filename}
                           </h4>
 
-                          <p className="text-[11px] font-mono text-slate-500 truncate mb-3">
-                            {file.filename}
-                          </p>
-
-                          <div className="mt-auto flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-vault-800/80">
-                            <span className="px-1.5 py-0.5 bg-vault-950 rounded border border-vault-800 font-mono text-[10px] text-vault-accent font-bold">
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-white/5 border border-white/10 text-slate-300">
                               {file.extension.toUpperCase().replace('.', '')}
                             </span>
-                            <span className="flex items-center gap-1 font-mono text-[10px]">
-                              <HardDrive className="w-3 h-3 text-slate-500" />
-                              {file.sizeFormatted}
-                            </span>
+                            <span>•</span>
+                            <span className="font-mono text-slate-400">{file.sizeFormatted}</span>
                             {hasAss && (
-                              <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded text-[9px] font-bold">
-                                ASS
-                              </span>
+                              <>
+                                <span>•</span>
+                                <span className="px-1 py-0.2 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded text-[9px] font-bold">
+                                  ASS Subtitles
+                                </span>
+                              </>
                             )}
                           </div>
                         </div>
@@ -375,9 +375,9 @@ export default function FolderExplorer({
                       <div
                         key={file.id}
                         onClick={() => onSelectVideo(file)}
-                        className="group flex items-center gap-3 p-3 bg-vault-900/90 hover:bg-vault-850 border border-vault-800 hover:border-vault-accent/40 rounded-xl cursor-pointer transition shadow-sm hover:shadow-lg"
+                        className="group flex items-center gap-3.5 p-3 bg-vault-900/90 hover:bg-vault-850 border border-white/10 hover:border-vault-accent/50 rounded-xl cursor-pointer transition shadow-sm hover:shadow-lg"
                       >
-                        <div className="w-24 aspect-video rounded-lg overflow-hidden flex-shrink-0">
+                        <div className="w-24 aspect-video rounded-lg overflow-hidden flex-shrink-0 border border-white/10">
                           <VideoThumbnail
                             streamUrl={file.streamUrl}
                             posterUrl={file.posterUrl}
@@ -389,23 +389,20 @@ export default function FolderExplorer({
 
                         <div className="flex-1 min-w-0">
                           <h4
-                            className="text-xs font-bold text-slate-200 group-hover:text-vault-accent line-clamp-1 transition mb-0.5"
+                            className="text-sm font-semibold text-slate-200 group-hover:text-vault-accent line-clamp-1 transition mb-1"
                             title={file.filename}
                           >
                             {file.title || file.filename}
                           </h4>
-                          <p className="text-[10px] font-mono text-slate-500 truncate mb-1">
-                            {file.filename}
-                          </p>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                          <div className="flex items-center gap-2 text-[11px] text-slate-400">
                             <span className="text-vault-accent font-mono font-bold">
                               {file.extension.toUpperCase().replace('.', '')}
                             </span>
-                            <span>&bull;</span>
+                            <span>•</span>
                             <span>{file.sizeFormatted}</span>
                             {hasAss && (
                               <>
-                                <span>&bull;</span>
+                                <span>•</span>
                                 <span className="text-purple-400 font-bold">ASS</span>
                               </>
                             )}
@@ -419,81 +416,50 @@ export default function FolderExplorer({
 
               {/* View Mode 3: Details Table */}
               {folderViewMode === 'details' && (
-                <div className="bg-vault-900 border border-vault-800 rounded-2xl overflow-hidden shadow-lg">
+                <div className="bg-vault-900/50 rounded-xl overflow-hidden border border-white/10">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-vault-950/80 border-b border-vault-800 text-slate-400 uppercase text-[10px] tracking-wider font-semibold">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-white/5 text-slate-400 text-xs font-semibold uppercase tracking-wider">
                         <tr>
-                          <th className="py-3 px-4">Thumbnail</th>
-                          <th className="py-3 px-4">File Name / Title</th>
-                          <th className="py-3 px-4">Format</th>
+                          <th className="py-3 px-4">Title</th>
+                          <th className="py-3 px-4">Type</th>
                           <th className="py-3 px-4">Size</th>
-                          <th className="py-3 px-4">Subtitles</th>
                           <th className="py-3 px-4">Modified</th>
                           <th className="py-3 px-4 text-right">Action</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-vault-800/50">
-                        {data.files.map((file) => {
-                          const hasAss = file.subtitles?.some((s) => s.format === 'ass' || s.format === 'ssa');
-                          return (
-                            <tr
-                              key={file.id}
-                              onClick={() => onSelectVideo(file)}
-                              className="hover:bg-vault-850/60 cursor-pointer transition group"
-                            >
-                              <td className="py-2.5 px-4 w-20">
-                                <div className="w-16 aspect-video rounded-md overflow-hidden">
-                                  <VideoThumbnail
-                                    streamUrl={file.streamUrl}
-                                    posterUrl={file.posterUrl}
-                                    thumbnailUrl={file.thumbnailUrl}
-                                    alt={file.title}
-                                    aspectRatio="aspect-video"
-                                    showPlayIcon={false}
-                                  />
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-4 font-semibold text-slate-200 group-hover:text-vault-accent">
-                                <div className="line-clamp-1">{file.title || file.filename}</div>
-                                <div className="text-[10px] font-mono text-slate-500 line-clamp-1">{file.filename}</div>
-                              </td>
-                              <td className="py-2.5 px-4 font-mono text-vault-accent font-bold">
-                                {file.extension.toUpperCase().replace('.', '')}
-                              </td>
-                              <td className="py-2.5 px-4 font-mono text-slate-400">
-                                {file.sizeFormatted}
-                              </td>
-                              <td className="py-2.5 px-4">
-                                {hasAss ? (
-                                  <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded text-[10px] font-bold">
-                                    ASS STYLED
-                                  </span>
-                                ) : file.subtitles?.length > 0 ? (
-                                  <span className="px-2 py-0.5 bg-vault-800 text-slate-300 rounded text-[10px]">
-                                    {file.subtitles.length} Sub
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-600">-</span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-4 text-slate-500">
-                                {formatTimeAgo(file.modifiedAt)}
-                              </td>
-                              <td className="py-2.5 px-4 text-right">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onSelectVideo(file);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg bg-vault-accent text-white font-bold text-xs shadow hover:bg-vault-accent-hover transition"
-                                >
-                                  Play
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                      <tbody className="divide-y divide-white/5">
+                        {data.files.map((file) => (
+                          <tr
+                            key={file.id}
+                            onClick={() => onSelectVideo(file)}
+                            className="hover:bg-white/5 transition-colors cursor-pointer group"
+                          >
+                            <td className="py-2.5 px-4 font-medium text-slate-200 group-hover:text-white truncate max-w-xs">
+                              {file.title || file.filename}
+                            </td>
+                            <td className="py-2.5 px-4 font-mono text-xs text-vault-accent uppercase">
+                              {file.extension.replace('.', '')}
+                            </td>
+                            <td className="py-2.5 px-4 font-mono text-xs text-slate-400">
+                              {file.sizeFormatted}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs text-slate-400">
+                              {formatTimeAgo(file.modifiedAt)}
+                            </td>
+                            <td className="py-2.5 px-4 text-right">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSelectVideo(file);
+                                }}
+                                className="px-3 py-1 bg-white/10 hover:bg-vault-accent text-white rounded-lg font-medium transition text-xs"
+                              >
+                                Play
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
@@ -502,29 +468,22 @@ export default function FolderExplorer({
             </div>
           )}
 
-          {/* Empty Folder State */}
           {data.folders.length === 0 && data.files.length === 0 && (
-            <div className="py-16 text-center bg-vault-900/50 border border-vault-800/60 rounded-2xl">
+            <div className="py-24 text-center">
               <Folder className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-              <p className="text-slate-400 font-medium text-sm">This folder does not contain any subfolders or video files.</p>
-              <button
-                onClick={handleNavigateUp}
-                className="mt-4 px-4 py-2 bg-vault-800 hover:bg-vault-700 text-white rounded-xl text-xs font-semibold transition"
-              >
-                Go Up
-              </button>
+              <p className="text-slate-400 font-medium">This directory is empty</p>
             </div>
           )}
         </div>
       )}
 
-      {/* 3-Mode Folder Thumbnail Modal */}
+      {/* Folder Thumbnail Settings Modal */}
       {configFolder && (
         <FolderThumbModal
-          isOpen={Boolean(configFolder)}
           folder={configFolder}
+          isOpen={Boolean(configFolder)}
           onClose={() => setConfigFolder(null)}
-          onUpdated={() => loadFolder(currentSubpath)}
+          onUpdated={() => loadFolder(currentSubpath, false)}
         />
       )}
     </div>
