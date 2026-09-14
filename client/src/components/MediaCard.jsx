@@ -1,6 +1,7 @@
 import React from 'react';
 import { Play, Film, Tv, Sparkles, Subtitles, Layers } from 'lucide-react';
 import { getCategoryBadgeClass } from '../utils/formatters';
+import { appendAuthToken } from '../utils/api';
 import VideoThumbnail from './VideoThumbnail';
 
 export default function MediaCard({
@@ -26,15 +27,16 @@ export default function MediaCard({
       <div className="relative aspect-[16/10] w-full bg-gradient-to-tr from-vault-950 via-vault-850 to-vault-800 overflow-hidden">
         {item.posterUrl ? (
           <img
-            src={item.posterUrl}
+            src={appendAuthToken(item.posterUrl)}
             alt={item.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />
-        ) : !isSeries && item.streamUrl ? (
+        ) : !isSeries && (item.thumbnailUrl || item.streamUrl) ? (
           <VideoThumbnail
             streamUrl={item.streamUrl}
             posterUrl={null}
+            thumbnailUrl={item.thumbnailUrl}
             alt={item.title}
             aspectRatio="aspect-[16/10]"
             showPlayIcon={false}

@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { config } from './config.js';
 import { findExternalSubtitles } from './subtitles.js';
+import { findExactCompanionPoster } from './thumbnails.js';
 
 /**
  * Format bytes to readable string (e.g., 1.45 GB)
@@ -24,143 +25,142 @@ export function parseMediaInfo(filename, parentFolderName = '') {
   const ext = path.extname(filename);
   let raw = path.basename(filename, ext);
 
-  // Remove release groups like [SubsPlease], [Erai-raws], (1080p), [HEVC], etc.
+  // Strip release groups: [SubsPlease], [Erai-raws], (1080p), [HEVC], etc.
   let clean = raw
-    .replace(/^\[[^\]]+\]\s*/g, '') // remove leading [Group]
-    .replace(/\s*\[[^\]]+\]/g, '')   // remove trailing [Hash] or [Info]
-    .replace(/\s*\([^)]*(?:1080p|720p|4k|2160p|bluray|web-dl|x264|x265|hevc|aac)[^)]*\)/gi, '') // remove technical info in ()
+    .replace(/\[[a-zA-Z0-9_\-\s.]+\]/g, '')
+    .replace(/\([a-zA-Z0-9_\-\s.]+\)/g, '')
     .trim();
 
-  // Try parsing Season and Episode: S01E02, S1 E2, etc.
+  // Pattern: "Show Name - 01" or "Show Name S01E01"
+  let showName = parentFolderName || 'Unknown';
   let season = 1;
   let episode = null;
-  let showName = parentFolderName;
+  let year = null;
 
-  const sxxExxMatch = clean.match(/^(.+?)[._\s]+S(\d{1,2})[._\s]*E(\d{1,3})(?:[._\s]+(.*))?$/i);
-  if (sxxExxMatch) {
-    showName = sxxExxMatch[1].replace(/[._]/g, ' ').trim() || parentFolderName;
-    season = parseInt(sxxExxMatch[2], 10);
-    episode = parseInt(sxxExxMatch[3], 10);
+  // Check for Year in parens, e.g. "Your Name (2016)"
+  const yearMatch = raw.match(/\b(19\d\d|20\d\d)\b/);
+  if (yearMatch) {
+    year = parseInt(yearMatch[1], 10);
+  }
+
+  // Check for SxxExx or Sxx.Exx
+  const seMatch = clean.match(/s(\d+)[\.\s_-]*e(\d+)/i);
+  if (seMatch) {
+    season = parseInt(seMatch[1], 10);
+    episode = parseInt(seMatch[2], 10);
+    const beforeSe = clean.slice(0, seMatch.index).trim();
+    if (beforeSe) {
+      showName = beforeSe.replace(/[\._\-]+/g, ' ').trim();
+    }
   } else {
-    // Try anime style: "Show Name - 01" or "Show Name - Episode 01"
-    const epMatch = clean.match(/^(.+?)\s*-\s*(?:Episode\s*|Ep\s*|#)?(\d{1,3})(?:\s*-\s*(.*))?$/i);
+    // Check for " - 01" or " - Episode 01" or "E01"
+    const epMatch = clean.match(/[\s_\.\-]+(?:ep|episode)?\s*(\d{1,4})(?:\s*v\d)?$/i);
     if (epMatch) {
-      showName = epMatch[1].replace(/[._]/g, ' ').trim() || parentFolderName;
-      episode = parseInt(epMatch[2], 10);
-    } else {
-      // Standalone episode number at the end
-      const standaloneMatch = clean.match(/^(.+?)[._\s]+(?:E|EP|Episode)[._\s]*(\d{1,3})$/i);
-      if (standaloneMatch) {
-        showName = standaloneMatch[1].replace(/[._]/g, ' ').trim() || parentFolderName;
-        episode = parseInt(standaloneMatch[2], 10);
+      episode = parseInt(epMatch[1], 10);
+      const beforeEp = clean.slice(0, epMatch.index).trim();
+      if (beforeEp) {
+        showName = beforeEp.replace(/[\._\-]+/g, ' ').trim();
       }
+    } else {
+      // Fallback: use raw clean name as title
+      showName = clean.replace(/[\._\-]+/g, ' ').trim() || parentFolderName || raw;
     }
   }
 
-  // Detect release year in title e.g. "Your Name (2016)"
-  const yearMatch = raw.match(/\b(19\d\d|20\d\d)\b/);
-  const year = yearMatch ? parseInt(yearMatch[1], 10) : null;
-
-  if (!showName && parentFolderName) {
-    showName = parentFolderName;
-  }
-  if (!showName) {
-    showName = clean.replace(/[._]/g, ' ').trim();
-  }
-
-  // Final display title
-  let displayTitle = clean;
+  // Format final readable display title
+  let displayTitle = showName;
   if (episode !== null) {
-    displayTitle = `${showName} - Episode ${String(episode).padStart(2, '0')}`;
+    const epStr = String(episode).padStart(2, '0');
+    displayTitle = `${showName} - E${epStr}`;
+  } else if (year) {
+    displayTitle = `${showName} (${year})`;
   }
 
   return {
-    rawName: raw,
-    cleanName: clean,
+    showName: showName || 'Unknown Show',
     displayTitle,
-    showName,
     season,
     episode,
     year,
+    rawBaseName: raw,
   };
 }
 
 /**
- * Find poster/thumbnail image in directory
+ * Searches for poster/cover artwork in the current directory or show name
  */
-function findPosterImage(fullDir, baseName = '') {
+export function findPosterImage(dirPath, showName) {
   try {
-    if (!fs.existsSync(fullDir)) return null;
-    const files = fs.readdirSync(fullDir);
+    const files = fs.readdirSync(dirPath);
+    // Prioritize standard cover/poster names
+    const preferredNames = ['poster', 'cover', 'folder', 'thumb', 'artwork'];
 
-    // 1. Look for specific baseName image e.g. "Frieren.jpg"
-    if (baseName) {
-      for (const f of files) {
-        const ext = path.extname(f).toLowerCase();
-        if (config.ALLOWED_POSTER_EXTENSIONS.includes(ext)) {
-          if (path.basename(f, ext).toLowerCase() === baseName.toLowerCase()) {
-            return f;
-          }
+    for (const name of preferredNames) {
+      for (const ext of config.ALLOWED_POSTER_EXTENSIONS) {
+        const target = `${name}${ext}`;
+        if (files.some((f) => f.toLowerCase() === target)) {
+          return files.find((f) => f.toLowerCase() === target);
         }
       }
     }
 
-    // 2. Look for standard poster files: poster, cover, folder, thumb
-    const standardNames = ['poster', 'cover', 'folder', 'thumb', 'artwork'];
-    for (const f of files) {
-      const ext = path.extname(f).toLowerCase();
-      if (config.ALLOWED_POSTER_EXTENSIONS.includes(ext)) {
-        const nameWithoutExt = path.basename(f, ext).toLowerCase();
-        if (standardNames.includes(nameWithoutExt)) {
-          return f;
+    // Match show name directly
+    if (showName) {
+      const cleanShow = showName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const f of files) {
+        const ext = path.extname(f).toLowerCase();
+        if (config.ALLOWED_POSTER_EXTENSIONS.includes(ext)) {
+          const fBase = path.basename(f, ext).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (fBase === cleanShow || fBase.includes(cleanShow)) {
+            return f;
+          }
         }
       }
     }
   } catch (err) {
     // ignore
   }
+
   return null;
 }
 
 /**
- * Recursively scans directory for video files
+ * Recursively scans mediaRoot directory for media files
  */
-export function scanMediaLibrary(mediaRoot = config.MEDIA_ROOT) {
+export function scanMediaLibrary(mediaRoot) {
   const result = {
-    scannedAt: new Date().toISOString(),
-    mediaRoot,
+    items: [],
+    series: [],
     totalFiles: 0,
     totalSizeBytes: 0,
-    categories: ['all', 'anime', 'movies', 'tv'],
-    items: [],
-    series: [], // Grouped view for Anime & TV Shows
   };
-
-  if (!fs.existsSync(mediaRoot)) {
-    console.warn(`Media root does not exist: ${mediaRoot}`);
-    return result;
-  }
 
   const seriesMap = new Map();
 
-  function traverse(currentDir, relativePrefix = '') {
-    let entries = [];
+  function traverse(currentDir) {
+    let entries;
     try {
       entries = fs.readdirSync(currentDir, { withFileTypes: true });
     } catch (err) {
-      console.error(`Error reading ${currentDir}:`, err.message);
+      console.warn(`Could not read dir: ${currentDir}`, err.message);
       return;
     }
 
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
-      const relPath = path.posix.join(relativePrefix, entry.name);
 
       if (entry.isDirectory()) {
-        traverse(fullPath, relPath);
+        // Skip hidden dot directories
+        if (!entry.name.startsWith('.')) {
+          traverse(fullPath);
+        }
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase();
-        if (!config.ALLOWED_VIDEO_EXTENSIONS.includes(ext)) continue;
+        if (!config.ALLOWED_VIDEO_EXTENSIONS.includes(ext)) {
+          continue;
+        }
+
+        const relPath = path.relative(mediaRoot, fullPath).replace(/\\/g, '/');
 
         let stat;
         try {
@@ -183,13 +183,26 @@ export function scanMediaLibrary(mediaRoot = config.MEDIA_ROOT) {
         const meta = parseMediaInfo(entry.name, parentFolder);
         const externalSubs = findExternalSubtitles(fullPath, relPath);
 
-        // Poster detection
-        const posterFile = findPosterImage(currentDir, meta.showName);
-        let posterUrl = null;
-        if (posterFile) {
-          const posterRelPath = path.posix.join(path.dirname(relPath), posterFile);
-          posterUrl = `/api/poster?path=${encodeURIComponent(posterRelPath)}`;
+        // Poster detection: check directory poster for show/series
+        const dirPosterFile = findPosterImage(currentDir, meta.showName);
+        let dirPosterUrl = null;
+        if (dirPosterFile) {
+          const posterRelPath = path.posix.join(path.dirname(relPath), dirPosterFile);
+          dirPosterUrl = `/api/poster?path=${encodeURIComponent(posterRelPath)}`;
         }
+
+        // Check for exact companion poster for this specific file only
+        const companion = findExactCompanionPoster(fullPath);
+        let itemPosterUrl = null;
+        if (companion) {
+          const compRelPath = path.relative(config.MEDIA_ROOT, companion).replace(/\\/g, '/');
+          itemPosterUrl = `/api/poster?path=${encodeURIComponent(compRelPath)}`;
+        } else if (category === 'movies' && dirPosterUrl) {
+          // For standalone movies, dir poster can be used if no exact match
+          itemPosterUrl = dirPosterUrl;
+        }
+
+        const thumbnailUrl = `/api/thumbnail?path=${encodeURIComponent(relPath)}`;
 
         const mediaItem = {
           id: Buffer.from(relPath).toString('base64url'),
@@ -206,7 +219,8 @@ export function scanMediaLibrary(mediaRoot = config.MEDIA_ROOT) {
           size: stat.size,
           sizeFormatted: formatBytes(stat.size),
           modifiedAt: stat.mtime.toISOString(),
-          posterUrl,
+          posterUrl: itemPosterUrl,
+          thumbnailUrl,
           subtitles: externalSubs,
         };
 
@@ -222,7 +236,7 @@ export function scanMediaLibrary(mediaRoot = config.MEDIA_ROOT) {
               id: Buffer.from(seriesKey).toString('base64url'),
               category,
               title: meta.showName,
-              posterUrl,
+              posterUrl: dirPosterUrl || thumbnailUrl,
               totalEpisodes: 0,
               totalSizeBytes: 0,
               totalSizeFormatted: '0 B',
@@ -235,8 +249,8 @@ export function scanMediaLibrary(mediaRoot = config.MEDIA_ROOT) {
           s.totalEpisodes += 1;
           s.totalSizeBytes += stat.size;
           s.totalSizeFormatted = formatBytes(s.totalSizeBytes);
-          if (posterUrl && !s.posterUrl) {
-            s.posterUrl = posterUrl;
+          if (dirPosterUrl && !s.posterUrl) {
+            s.posterUrl = dirPosterUrl;
           }
           if (new Date(stat.mtime) > new Date(s.latestModified)) {
             s.latestModified = stat.mtime.toISOString();

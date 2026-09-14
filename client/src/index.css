@@ -30,12 +30,14 @@
   overflow: hidden;
 }
 
+/* Keep art-mask transparent so it never covers the video with dark overlays */
 .art-video-player .art-mask {
-  background: rgba(9, 10, 15, 0.75);
+  background: transparent;
 }
 
+/* Use background-image so background-size (100px height at bottom) is preserved */
 .art-video-player .art-bottom {
-  background: linear-gradient(to top, rgba(9, 10, 15, 0.95), rgba(9, 10, 15, 0.6) 60%, transparent 100%);
+  background-image: linear-gradient(to top, rgba(9, 10, 15, 0.95), rgba(9, 10, 15, 0.6) 60%, transparent 100%);
 }
 
 .art-video-player .art-progress {

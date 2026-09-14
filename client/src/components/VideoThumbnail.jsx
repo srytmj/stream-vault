@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Film, Play, Sparkles } from 'lucide-react';
+import { appendAuthToken } from '../utils/api';
 
 // In-memory cache for client-side generated video frame thumbnails
 const thumbnailCache = new Map();
@@ -7,25 +8,30 @@ const thumbnailCache = new Map();
 export default function VideoThumbnail({
   streamUrl,
   posterUrl,
+  thumbnailUrl,
   alt = 'Video thumbnail',
   className = '',
   aspectRatio = 'aspect-video',
   showPlayIcon = true,
 }) {
+  const effectiveServerThumb = posterUrl || thumbnailUrl;
+
   const [thumbSrc, setThumbSrc] = useState(() => {
-    if (posterUrl) return posterUrl;
+    if (effectiveServerThumb) return appendAuthToken(effectiveServerThumb);
     if (streamUrl && thumbnailCache.has(streamUrl)) {
       return thumbnailCache.get(streamUrl);
     }
     return null;
   });
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasError, setHasError] = useState(false);
   const videoRef = useRef(null);
 
   useEffect(() => {
-    if (posterUrl) {
-      setThumbSrc(posterUrl);
+    if (effectiveServerThumb) {
+      setThumbSrc(appendAuthToken(effectiveServerThumb));
+      setHasError(false);
       return;
     }
 
@@ -46,11 +52,11 @@ export default function VideoThumbnail({
     video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
-    video.src = streamUrl;
+    video.src = appendAuthToken(streamUrl);
 
     const onLoadedMetadata = () => {
-      // Seek to 3 seconds or 10% into video
-      const targetTime = Math.min(3, Math.max(0.5, (video.duration || 10) * 0.05));
+      // Seek to 2 seconds or 5% into video
+      const targetTime = Math.min(2, Math.max(0.5, (video.duration || 10) * 0.05));
       video.currentTime = targetTime;
     };
 
@@ -116,7 +122,7 @@ export default function VideoThumbnail({
       clearTimeout(timer);
       cleanup();
     };
-  }, [streamUrl, posterUrl]);
+  }, [streamUrl, effectiveServerThumb]);
 
   return (
     <div className={`relative overflow-hidden bg-vault-900 flex items-center justify-center group ${aspectRatio} ${className}`}>

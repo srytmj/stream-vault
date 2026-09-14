@@ -15,10 +15,14 @@ import {
   Grid,
   List,
   Table,
+  Sliders,
+  Sparkles,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { browseLibraryFolder } from '../utils/api';
+import { browseLibraryFolder, appendAuthToken } from '../utils/api';
 import { formatTimeAgo } from '../utils/formatters';
 import VideoThumbnail from './VideoThumbnail';
+import FolderThumbModal from './FolderThumbModal';
 
 export default function FolderExplorer({
   library,
@@ -29,6 +33,7 @@ export default function FolderExplorer({
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [configFolder, setConfigFolder] = useState(null);
   const [folderViewMode, setFolderViewMode] = useState(() => {
     return localStorage.getItem('sv_folder_view_mode') || 'grid';
   });
@@ -66,6 +71,11 @@ export default function FolderExplorer({
     parts.pop();
     loadFolder(parts.join('/'));
   }
+
+  // Current folder display name
+  const currentFolderName = data?.breadcrumbs?.length
+    ? data.breadcrumbs[data.breadcrumbs.length - 1].name
+    : (library?.name || 'Root Folder');
 
   return (
     <div className="space-y-6">
@@ -115,8 +125,24 @@ export default function FolderExplorer({
             })}
           </div>
 
-          {/* Quick Actions & View Switcher */}
+          {/* Quick Actions, View Switcher & Folder Settings */}
           <div className="flex items-center gap-2">
+            {/* Button to configure thumbnail of currently open folder */}
+            <button
+              onClick={() =>
+                setConfigFolder({
+                  name: currentFolderName,
+                  subpath: currentSubpath,
+                })
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-vault-850 hover:bg-vault-800 border border-vault-750 text-xs font-semibold text-slate-300 hover:text-white rounded-xl transition"
+              title="Atur Cover / Thumbnail Folder Ini (3 Mode)"
+            >
+              <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Thumbnail Folder</span>
+            </button>
+
+            {/* View switcher */}
             <div className="flex items-center bg-vault-950 p-1 rounded-xl border border-vault-800 text-xs">
               <button
                 onClick={() => handleViewModeChange('grid')}
@@ -192,25 +218,30 @@ export default function FolderExplorer({
           {/* Subfolders Section with Visual Poster Cards */}
           {data.folders.length > 0 && (
             <div>
-              <div className="flex items-center gap-2 mb-3.5">
-                <FolderOpen className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  Direktori & Folder ({data.folders.length})
-                </h3>
+              <div className="flex items-center justify-between mb-3.5">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-amber-400" />
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                    Direktori & Folder ({data.folders.length})
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Klik ikon gear/gambar di kartu untuk mengubah mode thumbnail
+                </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5">
                 {data.folders.map((folder) => (
-                  <button
+                  <div
                     key={folder.subpath}
                     onClick={() => loadFolder(folder.subpath)}
-                    className="group relative flex flex-col bg-vault-900 border border-vault-800 hover:border-amber-400/60 rounded-2xl text-left transition hover:scale-[1.02] shadow-sm hover:shadow-xl overflow-hidden"
+                    className="group relative flex flex-col bg-vault-900 border border-vault-800 hover:border-amber-400/60 rounded-2xl text-left transition hover:scale-[1.02] shadow-sm hover:shadow-xl overflow-hidden cursor-pointer"
                   >
                     {/* Folder Artwork or Icon Banner */}
                     <div className="aspect-[16/10] w-full bg-vault-950 relative overflow-hidden flex items-center justify-center">
                       {folder.posterUrl ? (
                         <img
-                          src={folder.posterUrl}
+                          src={appendAuthToken(folder.posterUrl)}
                           alt={folder.name}
                           className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                           loading="lazy"
@@ -223,8 +254,21 @@ export default function FolderExplorer({
 
                       {/* Folder Icon Overlay Badge */}
                       <div className="absolute top-2 left-2 p-1.5 rounded-lg bg-vault-950/80 backdrop-blur-md border border-vault-700 text-amber-400">
-                        <Folder className="w-4 h-4 fill-amber-400/30" />
+                        <Folder className="w-3.5 h-3.5 fill-amber-400/30" />
                       </div>
+
+                      {/* Quick Edit Thumbnail Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfigFolder(folder);
+                        }}
+                        className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-vault-950/80 hover:bg-vault-800 text-slate-300 hover:text-white border border-vault-700 backdrop-blur-md transition shadow opacity-0 group-hover:opacity-100"
+                        title="Atur Cover / Thumbnail Folder Ini"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                      </button>
 
                       {folder.childCount > 0 && (
                         <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-vault-950/80 backdrop-blur-md border border-vault-700 text-[10px] font-mono font-bold text-slate-300">
@@ -234,14 +278,20 @@ export default function FolderExplorer({
                     </div>
 
                     <div className="p-3">
-                      <span className="text-xs font-bold text-slate-200 group-hover:text-amber-400 truncate block transition" title={folder.name}>
+                      <span
+                        className="text-xs font-bold text-slate-200 group-hover:text-amber-400 truncate block transition"
+                        title={folder.name}
+                      >
                         {folder.name}
                       </span>
-                      <span className="text-[10px] text-slate-500 mt-0.5 block">
-                        {folder.hasVideos ? 'Koleksi Video' : 'Folder Kosong'}
-                      </span>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                        <span>{folder.hasVideos ? 'Koleksi Video' : 'Folder Kosong'}</span>
+                        <span className="font-mono uppercase text-[9px] px-1 rounded bg-vault-950 border border-vault-800">
+                          {folder.thumbnailMode || 'auto'}
+                        </span>
+                      </div>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -258,7 +308,7 @@ export default function FolderExplorer({
                   </h3>
                 </div>
                 <span className="text-xs text-slate-400">
-                  Thumbnail Visual Otomatis • Zero Transcode
+                  Thumbnail Visual Unik Tiap Video &bull; 0% Transcode
                 </span>
               </div>
 
@@ -273,10 +323,11 @@ export default function FolderExplorer({
                         onClick={() => onSelectVideo(file)}
                         className="group flex flex-col bg-vault-900 border border-vault-800 hover:border-vault-accent/50 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-sm hover:shadow-xl overflow-hidden"
                       >
-                        {/* 16:9 Visual Video Thumbnail */}
+                        {/* 16:9 Visual Video Thumbnail with server generation */}
                         <VideoThumbnail
                           streamUrl={file.streamUrl}
                           posterUrl={file.posterUrl}
+                          thumbnailUrl={file.thumbnailUrl}
                           alt={file.title || file.filename}
                           aspectRatio="aspect-video"
                         />
@@ -330,6 +381,7 @@ export default function FolderExplorer({
                           <VideoThumbnail
                             streamUrl={file.streamUrl}
                             posterUrl={file.posterUrl}
+                            thumbnailUrl={file.thumbnailUrl}
                             alt={file.title || file.filename}
                             aspectRatio="aspect-video"
                           />
@@ -349,11 +401,11 @@ export default function FolderExplorer({
                             <span className="text-vault-accent font-mono font-bold">
                               {file.extension.toUpperCase().replace('.', '')}
                             </span>
-                            <span>•</span>
+                            <span>&bull;</span>
                             <span>{file.sizeFormatted}</span>
                             {hasAss && (
                               <>
-                                <span>•</span>
+                                <span>&bull;</span>
                                 <span className="text-purple-400 font-bold">ASS</span>
                               </>
                             )}
@@ -395,6 +447,7 @@ export default function FolderExplorer({
                                   <VideoThumbnail
                                     streamUrl={file.streamUrl}
                                     posterUrl={file.posterUrl}
+                                    thumbnailUrl={file.thumbnailUrl}
                                     alt={file.title}
                                     aspectRatio="aspect-video"
                                     showPlayIcon={false}
@@ -463,6 +516,16 @@ export default function FolderExplorer({
             </div>
           )}
         </div>
+      )}
+
+      {/* 3-Mode Folder Thumbnail Modal */}
+      {configFolder && (
+        <FolderThumbModal
+          isOpen={Boolean(configFolder)}
+          folder={configFolder}
+          onClose={() => setConfigFolder(null)}
+          onUpdated={() => loadFolder(currentSubpath)}
+        />
       )}
     </div>
   );

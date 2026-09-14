@@ -24,6 +24,9 @@ import StatsModal from './components/StatsModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import AddLibraryModal from './components/AddLibraryModal';
 import FolderExplorer from './components/FolderExplorer';
+import LoginPage from './components/LoginPage';
+import ChangePasswordModal from './components/ChangePasswordModal';
+import { useAuth } from './context/AuthContext';
 import {
   fetchMediaLibrary,
   fetchServerHealth,
@@ -34,6 +37,8 @@ import {
 import { getWatchHistory } from './utils/storage';
 
 export default function App() {
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
+
   const [libraryData, setLibraryData] = useState({ items: [], series: [] });
   const [libraries, setLibraries] = useState([]);
   const [serverHealth, setServerHealth] = useState(null);
@@ -57,6 +62,7 @@ export default function App() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [showAddLibraryModal, setShowAddLibraryModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [watchHistory, setWatchHistory] = useState([]);
 
   const handleDisplayModeChange = (mode) => {
@@ -71,6 +77,7 @@ export default function App() {
         setShowStatsModal(false);
         setShowShortcutsModal(false);
         setShowAddLibraryModal(false);
+        setShowChangePasswordModal(false);
         setActiveSeriesModal(null);
       }
     };
@@ -80,6 +87,7 @@ export default function App() {
 
   // Load libraries and initial media catalog
   const loadData = useCallback(async (force = false) => {
+    if (!isAuthenticated) return;
     try {
       setError(null);
       const [mediaRes, healthRes, libsRes] = await Promise.all([
@@ -99,21 +107,24 @@ export default function App() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [isAuthenticated, loadData]);
 
   // Periodic health check
   useEffect(() => {
+    if (!isAuthenticated) return;
     const timer = setInterval(() => {
       fetchServerHealth()
         .then((res) => setServerHealth(res))
         .catch(() => {});
     }, 15000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isAuthenticated]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -145,7 +156,6 @@ export default function App() {
   const getEpisodeNavigation = () => {
     if (!currentVideo) return { next: null, prev: null, episodes: [] };
 
-    // If current video belongs to a series
     const foundSeries = libraryData.series.find((s) =>
       s.episodes.some((ep) => ep.id === currentVideo.id)
     );
@@ -163,6 +173,21 @@ export default function App() {
   };
 
   const nav = getEpisodeNavigation();
+
+  // Auth Loading Screen
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-vault-950 flex flex-col items-center justify-center text-center p-4">
+        <Loader2 className="w-10 h-10 text-vault-accent animate-spin mb-3" />
+        <p className="text-sm font-semibold text-slate-300">Memeriksa sesi StreamVault...</p>
+      </div>
+    );
+  }
+
+  // If Not Authenticated, show Komga/Jellyfin-style Login Page
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   // Fullscreen video player view
   if (currentVideo) {
@@ -199,6 +224,7 @@ export default function App() {
         isRefreshing={isRefreshing}
         onOpenShortcuts={() => setShowShortcutsModal(true)}
         onOpenStats={() => setShowStatsModal(true)}
+        onOpenChangePassword={() => setShowChangePasswordModal(true)}
       />
 
       {/* Main Container */}
@@ -208,7 +234,7 @@ export default function App() {
           <div className="flex flex-col items-center justify-center py-28 text-center">
             <Loader2 className="w-12 h-12 text-vault-accent animate-spin mb-4" />
             <p className="text-sm font-semibold text-slate-300">Menghubungkan ke origin range server...</p>
-            <p className="text-xs text-slate-500 mt-1">Zero Transcode Architecture • CPU 0%</p>
+            <p className="text-xs text-slate-500 mt-1">Zero Transcode Architecture &bull; CPU 0%</p>
           </div>
         )}
 
@@ -308,7 +334,6 @@ export default function App() {
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-vault-950 text-slate-400 border border-vault-800">
                               {lib.type}
                             </span>
-                            {/* Allow deleting custom libraries */}
                             {!['anime', 'movies', 'tv', 'default'].includes(lib.id) && (
                               <button
                                 onClick={(e) => handleDeleteLibrary(lib.id, e)}
@@ -375,6 +400,12 @@ export default function App() {
           setActiveTab('explorer');
           setActiveLibrary(newLib);
         }}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
       />
 
       {/* Architecture & Performance Stats Modal */}

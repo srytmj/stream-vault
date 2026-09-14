@@ -42,6 +42,7 @@ export default function VideoPlayer({
   const [showSubModal, setShowSubModal] = useState(false);
   const [showEpisodeDrawer, setShowEpisodeDrawer] = useState(false);
   const [videoResolution, setVideoResolution] = useState('Original (Direct Play)');
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   // Initialize and discover subtitle tracks (both external companion & embedded softsub)
   useEffect(() => {
@@ -237,6 +238,10 @@ export default function VideoPlayer({
     window.addEventListener('keydown', handleKeyDown);
 
     // Video events
+    art.on('control', (state) => {
+      setControlsVisible(state);
+    });
+
     art.on('ready', () => {
       if (initialTime > 0) {
         art.seek = initialTime;
@@ -328,7 +333,11 @@ export default function VideoPlayer({
   return (
     <div className="flex flex-col h-screen bg-black text-white relative select-none">
       {/* Top Header Controls */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-auto">
+      <div
+        className={`absolute top-0 left-0 right-0 z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent transition-opacity duration-300 ${
+          controlsVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      >
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -411,7 +420,7 @@ export default function VideoPlayer({
               onClick={() => setResumeToast(null)}
               className="text-slate-400 hover:text-white text-xs ml-1"
             >
-              ✕
+              &#x2715;
             </button>
           </div>
         )}
@@ -430,7 +439,7 @@ export default function VideoPlayer({
                 onClick={() => setShowSubModal(false)}
                 className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-vault-800"
               >
-                ✕
+                &#x2715;
               </button>
             </div>
 
@@ -529,7 +538,7 @@ export default function VideoPlayer({
               onClick={() => setShowEpisodeDrawer(false)}
               className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-vault-800"
             >
-              ✕
+              &#x2715;
             </button>
           </div>
 
