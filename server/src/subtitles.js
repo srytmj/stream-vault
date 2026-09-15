@@ -204,7 +204,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
         isBitmap,
         trackIndex: streamIndex,
         isEmbedded: true,
-        url: isBitmap ? null : `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}`,
+        url: isBitmap ? null : `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}&format=${format}`, 
         isDefault,
       };
     });
@@ -221,7 +221,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
 /**
  * Extract embedded subtitle stream using copy or transcode to ASS
  */
-export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
+export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0, codec = "ass") {
   const hashName = Buffer.from(videoFullPath + trackIndex).toString('hex').slice(0, 24);
   const subCacheDir = path.join(config.CACHE_DIR, 'subtitles');
 
@@ -235,38 +235,33 @@ export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
     return cacheFile;
   }
 
-  // 1. Try direct stream copy (-c:s copy) first. Works if stream is already ASS/SSA
-  try {
-    await execFileAsync('ffmpeg', [
-      '-nostdin',
-      '-threads', '1',
-      '-loglevel', 'error',
-      '-y',
-      '-i', videoFullPath,
-      '-map', `0:${trackIndex}`,
-      '-c:s', 'copy',
-      cacheFile,
-    ], {
-      timeout: 30000,
-      killSignal: 'SIGKILL',
-      maxBuffer: 1024 * 1024,
-    });
-  } catch {
-    // 2. If copy fails (e.g. converting SubRip/SRT or VTT to ASS), transcode to ASS
-    await execFileAsync('ffmpeg', [
-      '-nostdin',
-      '-threads', '1',
-      '-loglevel', 'error',
-      '-y',
-      '-i', videoFullPath,
-      '-map', `0:${trackIndex}`,
-      '-c:s', 'ass',
-      cacheFile,
-    ], {
-      timeout: 30000,
-      killSignal: 'SIGKILL',
-      maxBuffer: 1024 * 1024,
-    });
+  const isAss = codec === 'ass' || codec === 'ssa';
+
+  let success = false;
+  
+  if (isAss) {
+    try {
+      await execFileAsync('ffmpeg', [
+        '-nostdin', '-threads', '1', '-loglevel', 'error', '-y',
+        '-i', videoFullPath, '-map', `0:${trackIndex}`,
+        '-c:s', 'copy', cacheFile,
+      ], { timeout: 30000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 });
+      success = true;
+    } catch (err) {
+      success = false;
+    }
+  }
+
+  if (!success) {
+    try {
+      await execFileAsync('ffmpeg', [
+        '-nostdin', '-threads', '1', '-loglevel', 'error', '-y',
+        '-i', videoFullPath, '-map', `0:${trackIndex}`,
+        '-c:s', 'ass', cacheFile,
+      ], { timeout: 30000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024 });
+    } catch (err) {
+      throw new Error('FFmpeg failed to extract and transcode subtitle: ' + err.message);
+    }
   }
 
   if (!fs.existsSync(cacheFile) || fs.statSync(cacheFile).size === 0) {

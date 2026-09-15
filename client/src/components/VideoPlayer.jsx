@@ -257,6 +257,31 @@ export default function VideoPlayer({
     window.addEventListener('keydown', handleKeyDown);
 
     // Initial seek & mobile autoplay handling on ready
+    // Custom Double Tap / Double Click to Seek & Fullscreen
+    let lastTapTime = 0;
+    art.template.$video.addEventListener('click', (e) => {
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        // It's a double tap!
+        const rect = art.template.$video.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const width = rect.width;
+        
+        if (x < width * 0.3) {
+          art.seek = Math.max(0, art.currentTime - 5);
+          art.notice.show = '-5s';
+        } else if (x > width * 0.7) {
+          art.seek = Math.min(art.duration, art.currentTime + 5);
+          art.notice.show = '+5s';
+        } else {
+          art.fullscreen = !art.fullscreen;
+        }
+        lastTapTime = 0; // reset
+      } else {
+        lastTapTime = now;
+      }
+    });
+
     art.on('ready', () => {
       // Resume timestamp
       if (initialTime > 5 && initialTime < art.duration - 10) {
@@ -283,6 +308,7 @@ export default function VideoPlayer({
       });
     });
 
+    art.on('dblclick', () => { return false; });
     art.on('video:loadedmetadata', () => {
       if (art.video?.videoWidth && art.video?.videoHeight) {
         setVideoResolution(`${art.video.videoWidth}x${art.video.videoHeight} Original`);

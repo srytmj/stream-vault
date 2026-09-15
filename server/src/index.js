@@ -577,6 +577,7 @@ app.get('/api/subtitles', async (req, reply) => {
 app.get('/api/subtitles/extract', async (req, reply) => {
   const videoPath = req.query.path;
   const trackIndex = parseInt(req.query.track || '0', 10);
+  const format = req.query.format || 'ass';
 
   if (!videoPath) {
     return reply.status(400).send({ error: 'Missing path query parameter' });
@@ -590,7 +591,7 @@ app.get('/api/subtitles/extract', async (req, reply) => {
   }
 
   try {
-    const extractedFile = await extractEmbeddedSubtitle(fullPath, trackIndex);
+    const extractedFile = await extractEmbeddedSubtitle(fullPath, trackIndex, format);
     reply.header('Content-Type', 'text/x-ssa; charset=utf-8');
     reply.header('Access-Control-Allow-Origin', '*');
     return fs.createReadStream(extractedFile);
