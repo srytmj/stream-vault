@@ -381,13 +381,15 @@ export default function App() {
       {/* Top Application Header */}
       <Navbar
         selectedCategory={selectedCategory}
-        onSelectCategory={handleCategoryChange}
+        setSelectedCategory={handleCategoryChange}
         searchQuery={searchQuery}
-        onSearchChange={handleSearchChange}
+        setSearchQuery={handleSearchChange}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
         activeTab={activeTab}
-        onTabChange={handleTabChange}
+        setActiveTab={handleTabChange}
+        serverHealth={serverHealth}
+        onOpenAddLibrary={() => setShowAddLibraryModal(true)}
         onOpenStats={() => setShowStatsModal(true)}
         onOpenShortcuts={() => setShowShortcutsModal(true)}
         onOpenChangePassword={() => setShowChangePasswordModal(true)}
@@ -598,7 +600,26 @@ export default function App() {
         </button>
       </nav>
 
+      
+
+      {/* Video Player Fullscreen Modal */}
+      {currentVideo && (
+        <div className="fixed inset-0 z-[100] bg-black">
+          <VideoPlayer
+            mediaItem={currentVideo}
+            onBack={handleBackFromPlayer}
+            seriesEpisodes={
+              currentVideo.seriesId
+                ? libraryData.series?.find((s) => s.id === currentVideo.seriesId)?.episodes || []
+                : []
+            }
+            onSelectEpisode={(ep) => handlePlayMedia(ep)}
+          />
+        </div>
+      )}
+
       {/* Series Episodes Drawer/Modal */}
+
       {activeSeriesModal && (
         <SeriesModal
           series={activeSeriesModal}
