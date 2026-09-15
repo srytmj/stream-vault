@@ -62,13 +62,13 @@ export function findCompanionSubtitles(videoFullPath) {
   const videoExt = path.extname(videoFullPath);
   const videoBase = path.basename(videoFullPath, videoExt);
 
-  if (!fs.existsSync(dir)) return [];
+  if (!fs.existsSync(dir)) return { tracks: [], requiresRemux: false };
 
   let files;
   try {
     files = fs.readdirSync(dir);
   } catch {
-    return [];
+    return { tracks: [], requiresRemux: false };
   }
 
   const subtitles = [];
@@ -127,30 +127,30 @@ export async function checkFfmpegAvailable() {
  * Probe embedded subtitle tracks inside MKV/MP4 containers via single-thread ffprobe
  */
 export async function probeEmbeddedSubtitles(videoFullPath) {
-  if (!fs.existsSync(videoFullPath)) return [];
+  if (!fs.existsSync(videoFullPath)) return { tracks: [], requiresRemux: false };
 
   let stat;
   try {
     stat = fs.statSync(videoFullPath);
   } catch {
-    return [];
+    return { tracks: [], requiresRemux: false };
   }
 
   const cacheKey = `${videoFullPath}-${stat.mtimeMs}-${stat.size}`;
   if (probeCache.has(cacheKey)) {
     const cached = probeCache.get(cacheKey);
-    if (cached && cached.length > 0) return cached;
+    if (cached && cached.tracks) return cached;
   }
 
   const hasFfmpeg = await checkFfmpegAvailable();
-  if (!hasFfmpeg) return [];
+  if (!hasFfmpeg) return { tracks: [], requiresRemux: false };
 
   try {
     const stdout = await (async () => {
       const args = [
         '-v', 'error',
         '-threads', '1',
-        '-select_streams', 's',
+        '-select_streams', 'a,s',
         '-show_entries', 'stream=index,codec_name:stream_tags=language,title',
         '-of', 'json',
         videoFullPath,
@@ -167,15 +167,32 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
 
     const data = JSON.parse(stdout);
     if (!data.streams || !Array.isArray(data.streams)) {
-      probeCache.set(cacheKey, []);
-      return [];
+      const fallback = { tracks: [], requiresRemux: false };
+      probeCache.set(cacheKey, fallback);
+      return fallback;
     }
 
     const relPath = path.relative(config.MEDIA_ROOT, videoFullPath).replace(/\\/g, '/');
     const encodedPath = encodeURIComponent(relPath);
 
+    let requiresRemux = false;
     let foundDefault = false;
-    const tracks = data.streams.map((stream, idx) => {
+    const tracks = [];
+    
+    // Check audio streams for unsupported formats requiring web remux
+    const audioStreams = data.streams.filter((s) => s.codec_type === 'audio');
+    if (audioStreams.length > 0) {
+      // Check if ALL audio streams are unsupported (ac3, dts, flac, truehd, eac3)
+      const unsupported = ['ac3', 'eac3', 'dts', 'truehd', 'flac'];
+      const hasSupportedAudio = audioStreams.some(s => !unsupported.includes(s.codec_name?.toLowerCase()));
+      if (!hasSupportedAudio) {
+        requiresRemux = true;
+      }
+    }
+
+    const subStreams = data.streams.filter((s) => s.codec_type === 'subtitle');
+
+    subStreams.forEach((stream, idx) => {
       const streamIndex = stream.index;
       const langTag = stream.tags?.language || '';
       const titleTag = stream.tags?.title || '';
@@ -197,7 +214,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
       const isDefault = !isBitmap && !foundDefault;
       if (isDefault) foundDefault = true;
 
-      return {
+      tracks.push({
         label,
         lang: lang.toLowerCase().slice(0, 2),
         format,
@@ -206,11 +223,12 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
         isEmbedded: true,
         url: isBitmap ? null : `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}&format=${format}`, 
         isDefault,
-      };
+      });
     });
 
-    probeCache.set(cacheKey, tracks);
-    return tracks;
+    const result = { tracks, requiresRemux };
+    probeCache.set(cacheKey, result);
+    return result;
   } catch (err) {
     console.warn(`[Subtitles] FFprobe inspection failed for ${path.basename(videoFullPath)}:`, err.message);
     probeCache.set(cacheKey, []);

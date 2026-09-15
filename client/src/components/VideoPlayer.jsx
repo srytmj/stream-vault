@@ -75,11 +75,21 @@ export default function VideoPlayer({
     const itemPath = mediaItem.relativePath || mediaItem.subpath || mediaItem.filename;
     if (itemPath) {
       fetchSubtitleTracks(itemPath)
-        .then((tracks) => {
-          if (Array.isArray(tracks) && tracks.length > 0) {
+        .then((data) => {
+          // Backward compatibility check
+          const tracks = Array.isArray(data) ? data : data.tracks || [];
+          const requiresRemux = data.requiresRemux || false;
+
+          if (tracks.length > 0) {
             setAvailableSubtitles(tracks);
             const def = tracks.find((t) => t.isDefault) || tracks[0];
             if (def) setActiveSubtitle(def);
+          }
+
+          if (requiresRemux && artRef.current) {
+            const remuxUrl = appendAuthToken(`/api/stream/remux?path=${encodeURIComponent(mediaItem.relativePath)}`);
+            artRef.current.switchUrl(remuxUrl);
+            setVideoResolution('Web Remux (Auto Fixed Audio)');
           }
         })
         .catch(() => {});
@@ -257,30 +267,27 @@ export default function VideoPlayer({
     window.addEventListener('keydown', handleKeyDown);
 
     // Initial seek & mobile autoplay handling on ready
-    // Custom Double Tap / Double Click to Seek & Fullscreen
-    let lastTapTime = 0;
-    art.template.$video.addEventListener('click', (e) => {
-      const now = Date.now();
-      if (now - lastTapTime < 300) {
-        // It's a double tap!
-        const rect = art.template.$video.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const width = rect.width;
+    // Prevent double tap zoom on mobile
+    if (art.template.$video) {
+        art.template.$video.style.touchAction = 'manipulation';
         
-        if (x < width * 0.3) {
-          art.seek = Math.max(0, art.currentTime - 5);
-          art.notice.show = '-5s';
-        } else if (x > width * 0.7) {
-          art.seek = Math.min(art.duration, art.currentTime + 5);
-          art.notice.show = '+5s';
-        } else {
-          art.fullscreen = !art.fullscreen;
-        }
-        lastTapTime = 0; // reset
-      } else {
-        lastTapTime = now;
-      }
-    });
+        // Native double click event to cleanly catch double-taps on both mobile & desktop
+        art.template.$video.addEventListener('dblclick', (e) => {
+          const rect = art.template.$video.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const width = rect.width;
+          
+          if (x < width * 0.3) {
+            art.seek = Math.max(0, art.currentTime - 5);
+            art.notice.show = '-5s (Rewind)';
+          } else if (x > width * 0.7) {
+            art.seek = Math.min(art.duration, art.currentTime + 5);
+            art.notice.show = '+5s (Forward)';
+          } else {
+            art.fullscreen = !art.fullscreen;
+          }
+        });
+    }
 
     art.on('ready', () => {
       // Resume timestamp
