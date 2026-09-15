@@ -134,8 +134,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
   if (!hasFfmpeg) return [];
 
   try {
-    const stdout = await ffmpegQueue.add(
-      async () => {
+    const stdout = await (async () => {
         const args = [
           '-v', 'error',
           '-probesize', '1000000',
@@ -154,9 +153,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
         });
 
         return probeOut;
-      },
-      { description: `ffprobe subtitle tracks for ${path.basename(videoFullPath)}` }
-    );
+      })();
 
     const data = JSON.parse(stdout);
     if (!data.streams || !Array.isArray(data.streams)) {
@@ -173,6 +170,10 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
       const titleTag = stream.tags?.title || '';
       const lang = parseLanguageCode(langTag) || 'Track ' + (idx + 1);
       const format = (stream.codec_name || 'ass').toLowerCase();
+      // JASSUB only supports text-based subtitles. Filter out image/bitmap subs.
+      if (['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvbsub'].includes(format)) {
+        return null;
+      }
       const label = titleTag
         ? `${titleTag} [Softsub ${format.toUpperCase()}]`
         : `${lang} [Softsub ${format.toUpperCase()}] (Track ${idx + 1})`;
@@ -186,7 +187,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
         url: `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}`,
         isDefault: false,
       };
-    });
+    }).filter(t => t !== null);
 
     probeCache.set(cacheKey, tracks);
     return tracks;
@@ -214,8 +215,7 @@ export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
     return cacheFile;
   }
 
-  await ffmpegQueue.add(
-    async () => {
+  await (async () => {
       if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 0) {
         return;
       }
@@ -227,7 +227,7 @@ export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
         '-y',
         '-i', videoFullPath,
         '-map', `0:${trackIndex}`,
-        '-c:s', 'copy',
+        '-c:s', 'ass',
         cacheFile,
       ];
 
@@ -236,9 +236,7 @@ export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
         killSignal: 'SIGKILL',
         maxBuffer: 1024 * 1024,
       });
-    },
-    { description: `subtitle extraction track ${trackIndex} for ${path.basename(videoFullPath)}` }
-  );
+    })();
 
   return cacheFile;
 }
