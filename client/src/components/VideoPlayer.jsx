@@ -112,14 +112,15 @@ export default function VideoPlayer({
           workerUrl: '/jassub/jassub-worker.js',
           wasmUrl: '/jassub/jassub-worker.wasm',
           defaultFont: '/jassub/default.woff2',
-          blendMode: 'js',
-          asyncRender: true,
-          offscreenRender: true,
-          onDemandRender: true,
           fallbackFont: 'sans-serif',
         });
 
-        setJassubStatus('active');
+        jassubRef.current.ready.then(() => {
+          jassubRef.current?.resize();
+          setJassubStatus('active');
+        }).catch((err) => {
+          console.warn('[StreamVault] JASSUB ready notice:', err);
+        });
       } catch (err) {
         console.error('Failed to initialize JASSUB canvas renderer:', err);
         setJassubStatus('error');
@@ -286,6 +287,21 @@ export default function VideoPlayer({
       if (art.video?.videoWidth && art.video?.videoHeight) {
         setVideoResolution(`${art.video.videoWidth}x${art.video.videoHeight} Original`);
       }
+      setTimeout(() => {
+        jassubRef.current?.resize();
+      }, 150);
+    });
+
+    art.on('resize', () => {
+      jassubRef.current?.resize();
+    });
+
+    art.on('fullscreen', () => {
+      setTimeout(() => jassubRef.current?.resize(), 150);
+    });
+
+    art.on('fullscreenWeb', () => {
+      setTimeout(() => jassubRef.current?.resize(), 150);
     });
 
     // Auto-save watch progress periodically
@@ -319,10 +335,26 @@ export default function VideoPlayer({
 
   // Update subtitle when activeSubtitle changes
   useEffect(() => {
-    if (artRef.current && artRef.current.video && activeSubtitle) {
+    if (!artRef.current) return;
+    if (activeSubtitle?.isBitmap) {
+      destroyJassub();
+      if (artRef.current.notice) {
+        artRef.current.notice.show = 'PGS subtitles are image-based (Blu-Ray). Please use External App (MPC-HC/VLC) to render them.';
+      }
+      return;
+    }
+    if (artRef.current.video && activeSubtitle?.url) {
       setupJassub(artRef.current.video, activeSubtitle.url);
+      if (['vtt', 'srt'].includes(activeSubtitle.format?.toLowerCase())) {
+        try {
+          artRef.current.subtitle.switch(appendAuthToken(activeSubtitle.url), { name: activeSubtitle.label });
+        } catch {}
+      }
     } else if (!activeSubtitle) {
       destroyJassub();
+      try {
+        if (artRef.current.subtitle) artRef.current.subtitle.show = false;
+      } catch {}
     }
   }, [activeSubtitle, setupJassub, destroyJassub]);
 
@@ -670,13 +702,19 @@ export default function VideoPlayer({
                 </button>
 
                 {availableSubtitles.map((sub, idx) => {
-                  const isSelected = activeSubtitle && activeSubtitle.url === sub.url;
+                  const isSelected = activeSubtitle && (activeSubtitle.url === sub.url || (activeSubtitle.trackIndex === sub.trackIndex && activeSubtitle.isEmbedded));
                   const isAss = sub.format === 'ass' || sub.format === 'ssa';
+                  const isBitmap = sub.isBitmap;
 
                   return (
                     <button
-                      key={sub.url || idx}
+                      key={sub.url || sub.trackIndex || idx}
                       onClick={() => {
+                        if (isBitmap) {
+                          setShowSubModal(false);
+                          setShowExternalModal(true);
+                          return;
+                        }
                         setActiveSubtitle(sub);
                         setShowSubModal(false);
                       }}
@@ -691,13 +729,25 @@ export default function VideoPlayer({
                           {sub.label}
                         </span>
                         <span className="text-[11px] text-slate-500 font-mono">
-                          {sub.isEmbedded ? 'Internal softsub (MKV container)' : sub.filename}
+                          {isBitmap
+                            ? 'Blu-Ray Image Subtitle (Click to open in External App)'
+                            : sub.isEmbedded
+                            ? 'Internal softsub (MKV container)'
+                            : sub.filename}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        {isAss && (
+                        {isBitmap ? (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-bold">
+                            BD-PGS
+                          </span>
+                        ) : isAss ? (
                           <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold">
                             ASS CANVAS
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30 text-[10px] font-bold">
+                            TEXT SUB
                           </span>
                         )}
                         {isSelected && <Check className="w-4 h-4 text-vault-accent" />}

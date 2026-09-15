@@ -10,7 +10,7 @@ import mime from 'mime-types';
 import { config } from './config.js';
 import { ffmpegQueue } from './processQueue.js';
 import { scanMediaLibrary } from './scanner.js';
-import { handleByteRangeStream, resolveSafePath } from './streamer.js';
+import { handleByteRangeStream, handleRemuxStream, resolveSafePath } from './streamer.js';
 import {
   checkFfmpegAvailable,
   extractEmbeddedSubtitle,
@@ -503,6 +503,12 @@ app.route({
   method: ['GET', 'HEAD'],
   url: '/api/stream',
   handler: async (req, reply) => handleByteRangeStream(req, reply),
+});
+
+app.route({
+  method: ['GET'],
+  url: '/api/stream/remux',
+  handler: async (req, reply) => handleRemuxStream(req, reply),
 });
 
 // ==========================================

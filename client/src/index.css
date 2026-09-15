@@ -34,6 +34,13 @@
   background: transparent;
 }
 
+/* Ensure JASSUB WebAssembly canvas stays crisp, positioned over video, and under controls */
+canvas.JASSUB {
+  position: absolute !important;
+  pointer-events: none !important;
+  z-index: 20 !important;
+}
+
 /* Use background-image so background-size (100px height at bottom) is preserved */
 .art-video-player .art-bottom {
   background-image: linear-gradient(to top, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.6) 60%, transparent 100%);

@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { config } from './config.js';
-import { ffmpegQueue } from './processQueue.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -65,18 +64,30 @@ export function findCompanionSubtitles(videoFullPath) {
 
   if (!fs.existsSync(dir)) return [];
 
-  const files = fs.readdirSync(dir);
+  let files;
+  try {
+    files = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+
   const subtitles = [];
+  const videoFiles = files.filter(f => config.ALLOWED_VIDEO_EXTENSIONS.includes(path.extname(f).toLowerCase()));
 
   for (const file of files) {
     const ext = path.extname(file).toLowerCase();
     if (!config.ALLOWED_SUBTITLE_EXTENSIONS.includes(ext)) continue;
 
-    // Match files that start with same base name
-    if (file.startsWith(videoBase)) {
+    const fileBase = path.basename(file, ext);
+    // Match if file starts with videoBase, or matches exactly, or if folder has only 1 video
+    const isMatch = file.startsWith(videoBase) ||
+      fileBase.toLowerCase() === videoBase.toLowerCase() ||
+      (videoFiles.length === 1);
+
+    if (isMatch) {
       const subFullPath = path.join(dir, file);
       const subSuffix = file.slice(videoBase.length, -ext.length);
-      const lang = parseLanguageCode(subSuffix) || 'Default';
+      const lang = parseLanguageCode(subSuffix || fileBase) || 'External';
       const format = ext.replace('.', '').toUpperCase();
 
       const relPath = path.relative(config.MEDIA_ROOT, subFullPath);
@@ -113,7 +124,7 @@ export async function checkFfmpegAvailable() {
 }
 
 /**
- * Probe embedded subtitle tracks inside MKV/MP4 containers via guarded single-thread ffprobe
+ * Probe embedded subtitle tracks inside MKV/MP4 containers via single-thread ffprobe
  */
 export async function probeEmbeddedSubtitles(videoFullPath) {
   if (!fs.existsSync(videoFullPath)) return [];
@@ -127,7 +138,8 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
 
   const cacheKey = `${videoFullPath}-${stat.mtimeMs}-${stat.size}`;
   if (probeCache.has(cacheKey)) {
-    return probeCache.get(cacheKey);
+    const cached = probeCache.get(cacheKey);
+    if (cached && cached.length > 0) return cached;
   }
 
   const hasFfmpeg = await checkFfmpegAvailable();
@@ -135,25 +147,23 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
 
   try {
     const stdout = await (async () => {
-        const args = [
-          '-v', 'error',
-          '-probesize', '1000000',
-          '-analyzeduration', '1000000',
-          '-threads', '1',
-          '-select_streams', 's',
-          '-show_entries', 'stream=index,codec_name:stream_tags=language,title',
-          '-of', 'json',
-          videoFullPath,
-        ];
+      const args = [
+        '-v', 'error',
+        '-threads', '1',
+        '-select_streams', 's',
+        '-show_entries', 'stream=index,codec_name:stream_tags=language,title',
+        '-of', 'json',
+        videoFullPath,
+      ];
 
-        const { stdout: probeOut } = await execFileAsync('ffprobe', args, {
-          timeout: config.FFMPEG_TIMEOUT_MS,
-          killSignal: 'SIGKILL',
-          maxBuffer: 1024 * 1024,
-        });
+      const { stdout: probeOut } = await execFileAsync('ffprobe', args, {
+        timeout: config.FFMPEG_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+        maxBuffer: 1024 * 1024,
+      });
 
-        return probeOut;
-      })();
+      return probeOut;
+    })();
 
     const data = JSON.parse(stdout);
     if (!data.streams || !Array.isArray(data.streams)) {
@@ -164,42 +174,52 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
     const relPath = path.relative(config.MEDIA_ROOT, videoFullPath).replace(/\\/g, '/');
     const encodedPath = encodeURIComponent(relPath);
 
+    let foundDefault = false;
     const tracks = data.streams.map((stream, idx) => {
       const streamIndex = stream.index;
       const langTag = stream.tags?.language || '';
       const titleTag = stream.tags?.title || '';
       const lang = parseLanguageCode(langTag) || 'Track ' + (idx + 1);
       const format = (stream.codec_name || 'ass').toLowerCase();
-      // JASSUB only supports text-based subtitles. Filter out image/bitmap subs.
-      if (['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvbsub'].includes(format)) {
-        return null;
+      const isBitmap = ['hdmv_pgs_subtitle', 'dvd_subtitle', 'dvbsub'].includes(format);
+
+      let label;
+      if (isBitmap) {
+        label = titleTag
+          ? `${titleTag} [Blu-Ray PGS Image]`
+          : `${lang} [Blu-Ray PGS Image] (Track ${idx + 1})`;
+      } else {
+        label = titleTag
+          ? `${titleTag} [Softsub ${format.toUpperCase()}]`
+          : `${lang} [Softsub ${format.toUpperCase()}] (Track ${idx + 1})`;
       }
-      const label = titleTag
-        ? `${titleTag} [Softsub ${format.toUpperCase()}]`
-        : `${lang} [Softsub ${format.toUpperCase()}] (Track ${idx + 1})`;
+
+      const isDefault = !isBitmap && !foundDefault;
+      if (isDefault) foundDefault = true;
 
       return {
         label,
         lang: lang.toLowerCase().slice(0, 2),
         format,
+        isBitmap,
         trackIndex: streamIndex,
         isEmbedded: true,
-        url: `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}`,
-        isDefault: false,
+        url: isBitmap ? null : `/api/subtitles/extract?path=${encodedPath}&track=${streamIndex}`,
+        isDefault,
       };
-    }).filter(t => t !== null);
+    });
 
     probeCache.set(cacheKey, tracks);
     return tracks;
   } catch (err) {
-    console.warn(`[Subtitles] FFprobe inspection skipped/failed for ${path.basename(videoFullPath)}:`, err.message);
+    console.warn(`[Subtitles] FFprobe inspection failed for ${path.basename(videoFullPath)}:`, err.message);
     probeCache.set(cacheKey, []);
     return [];
   }
 }
 
 /**
- * Extract embedded subtitle stream using guarded single-thread copy (-c:s copy)
+ * Extract embedded subtitle stream using copy or transcode to ASS
  */
 export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
   const hashName = Buffer.from(videoFullPath + trackIndex).toString('hex').slice(0, 24);
@@ -215,28 +235,46 @@ export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0) {
     return cacheFile;
   }
 
-  await (async () => {
-      if (fs.existsSync(cacheFile) && fs.statSync(cacheFile).size > 0) {
-        return;
-      }
+  // 1. Try direct stream copy (-c:s copy) first. Works if stream is already ASS/SSA
+  try {
+    await execFileAsync('ffmpeg', [
+      '-nostdin',
+      '-threads', '1',
+      '-loglevel', 'error',
+      '-y',
+      '-i', videoFullPath,
+      '-map', `0:${trackIndex}`,
+      '-c:s', 'copy',
+      cacheFile,
+    ], {
+      timeout: 30000,
+      killSignal: 'SIGKILL',
+      maxBuffer: 1024 * 1024,
+    });
+  } catch {
+    // 2. If copy fails (e.g. converting SubRip/SRT or VTT to ASS), transcode to ASS
+    await execFileAsync('ffmpeg', [
+      '-nostdin',
+      '-threads', '1',
+      '-loglevel', 'error',
+      '-y',
+      '-i', videoFullPath,
+      '-map', `0:${trackIndex}`,
+      '-c:s', 'ass',
+      cacheFile,
+    ], {
+      timeout: 30000,
+      killSignal: 'SIGKILL',
+      maxBuffer: 1024 * 1024,
+    });
+  }
 
-      const args = [
-        '-nostdin',
-        '-threads', '1',
-        '-loglevel', 'error',
-        '-y',
-        '-i', videoFullPath,
-        '-map', `0:${trackIndex}`,
-        '-c:s', 'ass',
-        cacheFile,
-      ];
-
-      await execFileAsync('ffmpeg', args, {
-        timeout: 30000,
-        killSignal: 'SIGKILL',
-        maxBuffer: 1024 * 1024,
-      });
-    })();
+  if (!fs.existsSync(cacheFile) || fs.statSync(cacheFile).size === 0) {
+    if (fs.existsSync(cacheFile)) {
+      try { fs.unlinkSync(cacheFile); } catch {}
+    }
+    throw new Error('Extracted subtitle file was empty or corrupted');
+  }
 
   return cacheFile;
 }

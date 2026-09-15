@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import mime from 'mime-types';
@@ -157,4 +158,47 @@ export async function handleByteRangeStream(req, reply) {
 
   const stream = fs.createReadStream(fullPath, { start, end });
   return reply.send(stream);
+}
+
+
+
+export async function handleRemuxStream(req, reply) {
+  const queryPath = req.query.path;
+  if (!queryPath) {
+    return reply.status(400).send({ error: 'Missing path query parameter' });
+  }
+
+  let fullPath;
+  try {
+    fullPath = resolveSafePath(queryPath);
+  } catch (err) {
+    return reply.status(403).send({ error: err.message });
+  }
+
+  if (!fs.existsSync(fullPath)) {
+    return reply.status(404).send({ error: 'Media file not found' });
+  }
+  
+  reply.header('Content-Type', 'video/mp4');
+  reply.header('Accept-Ranges', 'none');
+  reply.header('Cache-Control', 'no-cache');
+  reply.header('Access-Control-Allow-Origin', '*');
+  reply.code(200);
+
+  // Instant hardware-free remuxing to MP4 container with safe AAC audio
+  const ffmpeg = spawn('ffmpeg', [
+    '-i', fullPath,
+    '-c:v', 'copy',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-movflags', 'frag_keyframe+empty_moov+faststart',
+    '-f', 'mp4',
+    'pipe:1'
+  ]);
+
+  req.raw.on('close', () => {
+    ffmpeg.kill('SIGKILL');
+  });
+
+  return reply.send(ffmpeg.stdout);
 }
