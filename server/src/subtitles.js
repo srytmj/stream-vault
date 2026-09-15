@@ -222,7 +222,7 @@ export async function probeEmbeddedSubtitles(videoFullPath) {
  * Extract embedded subtitle stream using copy or transcode to ASS
  */
 export async function extractEmbeddedSubtitle(videoFullPath, trackIndex = 0, codec = "ass") {
-  const hashName = Buffer.from(videoFullPath + trackIndex).toString('hex').slice(0, 24);
+  const hashName = Buffer.from(videoFullPath + trackIndex + 'v2').toString('hex').slice(0, 24);
   const subCacheDir = path.join(config.CACHE_DIR, 'subtitles');
 
   if (!fs.existsSync(subCacheDir)) {

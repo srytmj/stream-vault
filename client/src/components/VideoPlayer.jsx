@@ -463,6 +463,18 @@ export default function VideoPlayer({
 
           {/* Open in External Player (VLC / Infuse / MPV) */}
           <button
+            onClick={() => {
+              const remuxUrl = appendAuthToken(`/api/stream/remux?path=${encodeURIComponent(mediaItem.relativePath)}`);
+              artRef.current?.switchUrl(remuxUrl);
+              setVideoResolution('Web Remux (AAC Audio)');
+            }}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-fuchsia-600/80 hover:bg-fuchsia-500 border border-fuchsia-500/50 text-white transition backdrop-blur-md text-xs font-semibold"
+            title="Fix unsupported audio (AC3/DTS) by remuxing on the server"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Fix Audio</span>
+          </button>
+          <button
             onClick={() => setShowExternalModal(true)}
             className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-vault-900/80 hover:bg-vault-800 border border-white/10 text-slate-200 hover:text-white transition backdrop-blur-md text-xs font-semibold"
             title="Play in External App (VLC / Infuse / MPV)"
