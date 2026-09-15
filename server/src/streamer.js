@@ -51,31 +51,19 @@ export function getMediaMimeType(filePath) {
     fs.closeSync(fd);
 
     if (bytesRead >= 8) {
-      // Check for ISO BMFF / MP4 container (bytes 4..7 === 'ftyp')
       if (buf.toString('utf8', 4, 8) === 'ftyp') {
         return 'video/mp4';
       }
-      // Check for EBML container (Matroska / WebM: 0x1A 0x45 0xDF 0xA3)
       if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
-        return 'video/webm';
+        return ext === '.webm' ? 'video/webm' : 'video/x-matroska';
       }
     }
-  } catch {
-    // Fall back to extension-based lookup
-  }
+  } catch {}
 
-  if (ext === '.mp4' || ext === '.m4v') {
-    return 'video/mp4';
-  }
-  if (ext === '.webm') {
-    return 'video/webm';
-  }
-  if (ext === '.mkv') {
-    return 'video/webm';
-  }
-  if (ext === '.mov') {
-    return 'video/quicktime';
-  }
+  if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.mkv') return 'video/x-matroska';
+  if (ext === '.mov') return 'video/quicktime';
 
   return mime.lookup(filePath) || 'video/mp4';
 }
