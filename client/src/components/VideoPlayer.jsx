@@ -188,12 +188,12 @@ export default function VideoPlayer({
         },
       ],
       customType: {
-        mkv: function (video, url) {
-          video.src = appendAuthToken(url);
-        },
-        webm: function (video, url) {
-          video.src = appendAuthToken(url);
-        },
+        mkv: function (video, url) { video.src = url; },
+        webm: function (video, url) { video.src = url; },
+        mp4: function (video, url) { video.src = url; },
+        m4v: function (video, url) { video.src = url; },
+        avi: function (video, url) { video.src = url; },
+        mov: function (video, url) { video.src = url; },
       },
     });
 

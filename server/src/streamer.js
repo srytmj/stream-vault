@@ -38,7 +38,7 @@ export function getMediaMimeType(filePath) {
       }
       // Check for EBML container (Matroska / WebM: 0x1A 0x45 0xDF 0xA3)
       if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
-        return ext === '.webm' ? 'video/webm' : 'video/x-matroska';
+        return 'video/webm';
       }
     }
   } catch {
@@ -52,7 +52,7 @@ export function getMediaMimeType(filePath) {
     return 'video/webm';
   }
   if (ext === '.mkv') {
-    return 'video/x-matroska';
+    return 'video/webm';
   }
   if (ext === '.mov') {
     return 'video/quicktime';
