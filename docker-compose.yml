@@ -22,6 +22,7 @@ services:
     volumes:
       # Mount your host media collection read-only (:ro)
       - ./media:/media:ro
+      - /:/hostfs:ro
       # Persistent cache for video frame thumbnails and extracted subtitles
       - stream-vault-cache:/app/.cache
       # Persistent storage for folder metadata, libraries, and user databases

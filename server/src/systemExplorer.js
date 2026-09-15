@@ -43,6 +43,7 @@ export function browseSystemDirectories(requestedPath = '') {
   // Common homelab root storage locations
   const potentialRoots = [
     config.MEDIA_ROOT,
+    '/hostfs',
     '/media',
     '/mnt',
     '/data',
