@@ -2,16 +2,35 @@ import path from 'node:path';
 import fs from 'node:fs';
 import mime from 'mime-types';
 import { config } from './config.js';
+import { loadLibraries } from './libraries.js';
 
 /**
  * Validates that requested relative path stays strictly within MEDIA_ROOT
  */
-export function resolveSafePath(relativeFilePath, root = config.MEDIA_ROOT) {
-  const safeRel = path.normalize(relativeFilePath).replace(/^(\.\.[\/\\])+/, '');
-  const absolutePath = path.resolve(root, safeRel);
+export function resolveSafePath(requestedPath) {
+  // requestedPath could be relative to config.MEDIA_ROOT (e.g. "anime/video.mkv")
+  // or it could be a traversal going into another library (e.g. "../hostfs/mnt/...")
+  const absolutePath = path.resolve(config.MEDIA_ROOT, requestedPath);
 
-  if (!absolutePath.startsWith(path.resolve(root))) {
-    throw new Error('Access denied: Path outside media directory');
+  const allowedRoots = [path.resolve(config.MEDIA_ROOT)];
+  try {
+    const libs = loadLibraries();
+    libs.forEach(l => {
+      if (fs.existsSync(l.path)) {
+        allowedRoots.push(path.resolve(l.path));
+      }
+    });
+  } catch (err) {
+    console.error('Failed to load libraries for path validation:', err.message);
+  }
+
+  const isAllowed = allowedRoots.some(
+    (root) =>
+      absolutePath === root || absolutePath.startsWith(root + path.sep)
+  );
+  
+  if (!isAllowed) {
+    throw new Error(`Access denied: Path ${absolutePath} is outside authorized libraries`);
   }
 
   return absolutePath;
