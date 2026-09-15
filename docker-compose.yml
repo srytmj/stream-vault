@@ -13,7 +13,6 @@ services:
       - NODE_ENV=production
       - PORT=8090
       - HOST=0.0.0.0
-      - MEDIA_ROOT=/media
       - CACHE_DIR=/app/.cache
       - DATA_DIR=/app/data
       - FFMPEG_MAX_CONCURRENCY=1
@@ -24,9 +23,9 @@ services:
       - ./media:/media:ro
       - /:/hostfs:ro
       # Persistent cache for video frame thumbnails and extracted subtitles
-      - stream-vault-cache:/app/.cache
+      - ./.cache:/app/.cache
       # Persistent storage for folder metadata, libraries, and user databases
-      - stream-vault-data:/app/data
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8090/api/health"]
       interval: 30s
@@ -41,7 +40,3 @@ services:
           pids: 100
         reservations:
           memory: 128M
-
-volumes:
-  stream-vault-cache:
-  stream-vault-data:

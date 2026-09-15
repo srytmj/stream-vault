@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_DIR = config.DATA_DIR;
 const LIBRARIES_FILE = path.join(DATA_DIR, 'libraries.json');
 
 function ensureDataDir() {
