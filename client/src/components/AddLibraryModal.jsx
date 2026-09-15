@@ -91,7 +91,7 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
         </div>
 
         {/* Modal Body Container */}
-        <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0">
           {/* Main Form */}
           <form onSubmit={handleSubmit} className="p-6 space-y-4 flex-1 overflow-y-auto w-full">
             {error && (
@@ -188,7 +188,7 @@ export default function AddLibraryModal({ isOpen, onClose, onCreated }) {
 
           {/* Side Panel: Folder Browser */}
           {showBrowser && (
-            <div className="w-full md:w-72 bg-vault-950 border-t md:border-t-0 md:border-l border-vault-800 flex flex-col max-h-[300px] md:max-h-full shrink-0">
+            <div className="w-full md:w-72 bg-vault-950 border-t md:border-t-0 md:border-l border-vault-800 flex flex-col max-h-[300px] md:max-h-none h-full shrink-0">
               <div className="p-3 border-b border-vault-800 bg-vault-900/50">
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest mb-2 flex items-center gap-1.5">
                   <HardDrive className="w-3.5 h-3.5" /> Quick Roots
