@@ -24,6 +24,7 @@ import {
   getLibraryById,
 } from './libraries.js';
 import { browseFolder } from './explorer.js';
+import { browseSystemDirectories } from './systemExplorer.js';
 import {
   getOrGenerateVideoThumbnail,
   getFolderConfig,
@@ -282,6 +283,19 @@ app.delete('/api/libraries/:id', async (req, reply) => {
   }
   cachedLibrary = null;
   return { success: true };
+});
+
+// ==========================================
+// System Folder Browser API (for Library setup)
+
+app.get('/api/system-directories', async (req, reply) => {
+  const reqPath = req.query.path || '';
+  try {
+    const result = browseSystemDirectories(reqPath);
+    return result;
+  } catch (err) {
+    return reply.status(500).send({ error: err.message });
+  }
 });
 
 // ==========================================

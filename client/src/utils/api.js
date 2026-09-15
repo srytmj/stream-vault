@@ -264,3 +264,14 @@ export async function updateFolderThumbnail({ subpath, mode, file, imageBase64 }
   }
   return response.json();
 }
+
+export async function fetchSystemDirectories(path = '') {
+  const params = new URLSearchParams();
+  if (path) params.append('path', path);
+  
+  const response = await apiFetch(`/api/system-directories?${params.toString()}`);
+  if (!response.ok) {
+    throw new Error('Failed to browse system directories');
+  }
+  return response.json();
+}
