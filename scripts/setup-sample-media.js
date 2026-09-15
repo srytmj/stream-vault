@@ -229,7 +229,8 @@ async function run() {
       }
 
       console.log(`Successfully populated media library at ${base}`);
-    } catch (err) {\n      console.warn(`Could not setup media at ${base}:`, err.message);
+    } catch (err) {
+      console.warn(`Could not setup media at ${base}:`, err.message);
     }
   }
 }

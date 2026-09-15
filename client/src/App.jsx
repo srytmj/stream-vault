@@ -53,12 +53,17 @@ function parseRouteParams() {
   };
 }
 
-// Helper: Find media item across items and series episodes
+// Helper: Find media item across items, allItems, and series episodes
 function findMediaById(id, libraryData) {
   if (!id || !libraryData) return null;
   // Search standalone items
   const direct = libraryData.items?.find((i) => i.id === id);
   if (direct) return direct;
+  // Search flat allItems list if present
+  if (libraryData.allItems) {
+    const fromAll = libraryData.allItems.find((i) => i.id === id);
+    if (fromAll) return fromAll;
+  }
   // Search episodes inside series
   for (const s of libraryData.series || []) {
     const ep = s.episodes?.find((e) => e.id === id);
@@ -70,7 +75,7 @@ function findMediaById(id, libraryData) {
 export default function App() {
   const { user, loading: authLoading, isAuthenticated } = useAuth();
 
-  const [libraryData, setLibraryData] = useState({ items: [], series: [] });
+  const [libraryData, setLibraryData] = useState({ items: [], series: [], allItems: [] });
   const [libraries, setLibraries] = useState([]);
   const [serverHealth, setServerHealth] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -148,15 +153,15 @@ export default function App() {
       // Match Library
       if (route.libraryId) {
         const lib = librariesRef.current.find((l) => l.id === route.libraryId);
-        setActiveLibrary(lib || { id: route.libraryId, name: route.libraryId });
+        setActiveLibrary(lib || null);
       } else {
         setActiveLibrary(null);
       }
 
       // Match Video Player
       if (route.watchId) {
-        const video = findMediaById(route.watchId, libraryDataRef.current);
-        if (video) setCurrentVideo(video);
+        const item = findMediaById(route.watchId, libraryDataRef.current);
+        if (item) setCurrentVideo(item);
       } else {
         setCurrentVideo(null);
       }
@@ -232,8 +237,7 @@ export default function App() {
         if (foundSeries) setActiveSeriesModal(foundSeries);
       }
     } catch (err) {
-      console.error('Failed to load StreamVault data:', err);
-      setError(err.message || 'Failed to load media from server');
+      setError(err.message || 'Failed to load media vault');
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -241,52 +245,32 @@ export default function App() {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadData();
-    }
-  }, [isAuthenticated, loadData]);
+    loadData();
+  }, [loadData]);
 
-  // Periodic health check
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const timer = setInterval(() => {
-      fetchServerHealth()
-        .then((res) => setServerHealth(res))
-        .catch(() => {});
-    }, 20000);
-    return () => clearInterval(timer);
-  }, [isAuthenticated]);
-
+  // Manual rescan trigger
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
       await triggerMediaScan();
       await loadData(true);
-    } catch {
+    } catch (err) {
+      setError('Rescan error: ' + err.message);
       setIsRefreshing(false);
     }
   };
 
-  // Tab & Navigation Handlers with URL history sync
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === 'home') {
-      setActiveLibrary(null);
-      syncToUrl({ tab: null, libraryId: null, subpath: null });
-    } else if (tab === 'catalog') {
-      setActiveLibrary(null);
-      syncToUrl({ tab: 'catalog', libraryId: null, subpath: null });
-    } else {
-      syncToUrl({ tab: 'explorer' });
+    if (tab !== 'catalog') {
+      setSearchQuery('');
     }
+    syncToUrl({ tab, libraryId: tab === 'explorer' ? activeLibrary?.id : null });
   };
 
   const handleCategoryChange = (cat) => {
     setSelectedCategory(cat);
-    if (activeTab !== 'catalog') {
-      setActiveTab('catalog');
-    }
-    syncToUrl({ tab: 'catalog', category: cat });
+    syncToUrl({ category: cat });
   };
 
   const handleSearchChange = (query) => {
@@ -294,16 +278,22 @@ export default function App() {
     syncToUrl({ search: query || null }, true);
   };
 
+  // Open a specific library inside the Folder Explorer
+  const handleOpenFolderLibrary = (lib) => {
+    setActiveLibrary(lib);
+    setExplorerSubpath('');
+    setActiveTab('explorer');
+    syncToUrl({ tab: 'explorer', libraryId: lib.id, subpath: null });
+  };
+
+  // Selection from Home or other parts
   const handleSelectLibrary = (lib) => {
-    if (['anime', 'movies', 'tv'].includes(lib.type?.toLowerCase())) {
-      setSelectedCategory(lib.type.toLowerCase());
-      setActiveTab('catalog');
-      syncToUrl({ tab: 'catalog', category: lib.type.toLowerCase(), libraryId: null, subpath: null });
+    if (activeTab === 'explorer') {
+      handleOpenFolderLibrary(lib);
     } else {
-      setActiveLibrary(lib);
-      setExplorerSubpath('');
-      setActiveTab('explorer');
-      syncToUrl({ tab: 'explorer', libraryId: lib.id, subpath: null });
+      setSelectedCategory(lib.type?.toLowerCase() || 'all');
+      setActiveTab('catalog');
+      syncToUrl({ tab: 'catalog', category: lib.type?.toLowerCase() || 'all', libraryId: null, subpath: null });
     }
   };
 
@@ -359,130 +349,82 @@ export default function App() {
 
   const handleDeleteLibrary = async (id, e) => {
     e.stopPropagation();
-    if (!window.confirm('Remove this library from StreamVault? (Physical media files on disk will NOT be deleted)')) {
+    if (!confirm('Are you sure you want to remove this library? Files on disk are not deleted.')) {
       return;
     }
     try {
       await removeLibrary(id);
       setLibraries((prev) => prev.filter((l) => l.id !== id));
       if (activeLibrary?.id === id) {
-        handleBackToLibraries();
+        setActiveLibrary(null);
       }
     } catch (err) {
-      alert(err.message || 'Failed to remove library');
+      alert('Failed to remove library: ' + err.message);
     }
   };
 
-  // Episode navigation helpers for player
-  const getEpisodeNavigation = () => {
-    if (!currentVideo) return { next: null, prev: null, episodes: [] };
-
-    const foundSeries = libraryData.series?.find((s) =>
-      s.episodes?.some((ep) => ep.id === currentVideo.id)
-    );
-
-    if (foundSeries) {
-      const idx = foundSeries.episodes.findIndex((ep) => ep.id === currentVideo.id);
-      return {
-        next: idx >= 0 && idx < foundSeries.episodes.length - 1 ? foundSeries.episodes[idx + 1] : null,
-        prev: idx > 0 ? foundSeries.episodes[idx - 1] : null,
-        episodes: foundSeries.episodes,
-      };
-    }
-
-    return { next: null, prev: null, episodes: [] };
-  };
-
-  const nav = getEpisodeNavigation();
-
-  // Auth Loading Screen
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-vault-950 flex flex-col items-center justify-center text-center p-4">
+      <div className="min-h-screen bg-vault-950 flex flex-col items-center justify-center p-4">
         <Loader2 className="w-10 h-10 text-vault-accent animate-spin mb-3" />
-        <p className="text-sm font-semibold text-slate-300">Checking session...</p>
+        <p className="text-sm font-medium text-slate-400">Connecting to StreamVault...</p>
       </div>
     );
   }
 
-  // If Not Authenticated, show Login Page
   if (!isAuthenticated) {
     return <LoginPage />;
   }
 
-  // Fullscreen video player view
-  if (currentVideo) {
-    return (
-      <VideoPlayer
-        mediaItem={currentVideo}
-        onBack={handleBackFromPlayer}
-        onNextEpisode={() => {
-          if (nav.next) {
-            setCurrentVideo(nav.next);
-            syncToUrl({ watchId: nav.next.id });
-          }
-        }}
-        onPrevEpisode={() => {
-          if (nav.prev) {
-            setCurrentVideo(nav.prev);
-            syncToUrl({ watchId: nav.prev.id });
-          }
-        }}
-        hasNextEpisode={Boolean(nav.next)}
-        hasPrevEpisode={Boolean(nav.prev)}
-        seriesEpisodes={nav.episodes}
-        onSelectEpisode={(ep) => {
-          setCurrentVideo(ep);
-          syncToUrl({ watchId: ep.id });
-        }}
-      />
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#090c10] text-slate-100 flex flex-col antialiased selection:bg-vault-accent selection:text-white pb-20 md:pb-8">
-      {/* Top Sticky Navbar */}
+    <div className="min-h-screen bg-vault-950 text-slate-100 flex flex-col selection:bg-vault-accent selection:text-white pb-20 md:pb-10">
+      {/* Top Application Header */}
       <Navbar
-        searchQuery={searchQuery}
-        setSearchQuery={handleSearchChange}
         selectedCategory={selectedCategory}
-        setSelectedCategory={handleCategoryChange}
-        activeTab={activeTab}
-        setActiveTab={handleTabChange}
-        onOpenAddLibrary={() => setShowAddLibraryModal(true)}
-        serverHealth={serverHealth}
+        onSelectCategory={handleCategoryChange}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
         onRefresh={handleRefresh}
         isRefreshing={isRefreshing}
-        onOpenShortcuts={() => setShowShortcutsModal(true)}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
         onOpenStats={() => setShowStatsModal(true)}
+        onOpenShortcuts={() => setShowShortcutsModal(true)}
         onOpenChangePassword={() => setShowChangePasswordModal(true)}
+        totalFiles={libraryData.totalFiles}
+        totalSize={libraryData.totalSizeBytes}
       />
 
-      {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 pt-20 md:pt-24 pb-8 space-y-6">
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {/* Loading Spinner */}
         {loading && (
-          <div className="flex flex-col items-center justify-center py-32 text-center">
-            <Loader2 className="w-10 h-10 text-vault-accent animate-spin mb-3" />
-            <p className="text-sm font-semibold text-slate-300">Loading your media library...</p>
+          <div className="py-40 flex flex-col items-center justify-center">
+            <Loader2 className="w-12 h-12 text-vault-accent animate-spin mb-4" />
+            <h3 className="text-lg font-bold text-white">Loading Your Media Vault</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Scanning directories and streaming endpoints...
+            </p>
           </div>
         )}
 
-        {/* Error Alert */}
+        {/* Global Error Banner */}
         {error && !loading && (
-          <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <div className="flex-1">{error}</div>
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-between text-red-400">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="text-sm font-medium">{error}</span>
+            </div>
             <button
               onClick={() => loadData(true)}
-              className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 rounded-xl text-xs font-semibold"
+              className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-xs font-semibold rounded-lg transition"
             >
-              Try Again
+              Retry
             </button>
           </div>
         )}
 
-        {/* ================= TAB 0: JELLYFIN HOME VIEW ================= */}
+        {/* TAB 1: JELLYFIN STYLE HOMELAB DASHBOARD */}
         {!loading && !error && activeTab === 'home' && (
           <JellyfinHome
             libraries={libraries}
@@ -499,33 +441,21 @@ export default function App() {
           />
         )}
 
-        {/* ================= TAB 1: CATALOG VIEW ================= */}
+        {/* TAB 2: CATALOG EXPLORER (Grid, Compact List, Table Details) */}
         {!loading && !error && activeTab === 'catalog' && (
-          <>
-            {/* Continue Watching Section */}
-            {watchHistory.length > 0 && !searchQuery && selectedCategory === 'all' && (
-              <ContinueWatching
-                historyItems={watchHistory}
-                onPlayMedia={handlePlayMedia}
-                onRemove={handleRemoveHistory}
-              />
-            )}
-
-            {/* Media Grid with Multi-Mode Explorer (Grid / Compact / Details) */}
-            <MediaGrid
-              items={libraryData.items}
-              series={libraryData.series}
-              selectedCategory={selectedCategory}
-              searchQuery={searchQuery}
-              displayMode={displayMode}
-              onDisplayModeChange={handleDisplayModeChange}
-              onPlayMedia={handlePlayMedia}
-              onViewSeries={handleViewSeries}
-            />
-          </>
+          <MediaGrid
+            items={libraryData.items}
+            series={libraryData.series}
+            selectedCategory={selectedCategory}
+            searchQuery={searchQuery}
+            displayMode={displayMode}
+            onDisplayModeChange={handleDisplayModeChange}
+            onPlayMedia={handlePlayMedia}
+            onViewSeries={handleViewSeries}
+          />
         )}
 
-        {/* ================= TAB 2: FOLDER EXPLORER VIEW ================= */}
+        {/* TAB 3: HIERARCHICAL FOLDER EXPLORER (True Folders-First View) */}
         {!loading && !error && activeTab === 'explorer' && (
           <div>
             {!activeLibrary ? (
@@ -561,7 +491,7 @@ export default function App() {
                     return (
                       <div
                         key={lib.id}
-                        onClick={() => handleSelectLibrary(lib)}
+                        onClick={() => handleOpenFolderLibrary(lib)}
                         className="group relative flex flex-col p-5 bg-vault-900 border border-white/10 hover:border-vault-accent/60 rounded-2xl cursor-pointer transition-all hover:scale-[1.01] shadow-md hover:shadow-xl"
                       >
                         <div className="flex items-start justify-between mb-4">
@@ -687,8 +617,7 @@ export default function App() {
         onClose={() => setShowAddLibraryModal(false)}
         onCreated={(newLib) => {
           setLibraries((prev) => [...prev, newLib]);
-          setActiveTab('explorer');
-          handleSelectLibrary(newLib);
+          handleOpenFolderLibrary(newLib);
         }}
       />
 

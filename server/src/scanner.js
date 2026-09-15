@@ -17,11 +17,10 @@ export function formatBytes(bytes, decimals = 2) {
 }
 
 /**
- * Clean up anime and movie release names into readable titles
- * Example: "[SubsPlease] Sousou no Frieren - 01 (1080p) [9876FEDC].mkv"
- *   -> Show: "Sousou no Frieren", Episode: 1, Title: "Sousou no Frieren - Episode 01"
+ * Clean up anime, TV, and movie release names into readable titles.
+ * Prioritizes folder-based series/show names over messy filename regex guessing.
  */
-export function parseMediaInfo(filename, parentFolderName = '') {
+export function parseMediaInfo(filename, seriesFolderName = '', seasonFolder = '') {
   const ext = path.extname(filename);
   let raw = path.basename(filename, ext);
 
@@ -31,53 +30,57 @@ export function parseMediaInfo(filename, parentFolderName = '') {
     .replace(/\([a-zA-Z0-9_\-\s.]+\)/g, '')
     .trim();
 
-  // Pattern: "Show Name - 01" or "Show Name S01E01"
-  let showName = parentFolderName || 'Unknown';
   let season = 1;
   let episode = null;
   let year = null;
 
-  // Check for Year in parens, e.g. "Your Name (2016)"
+  // Detect season from folder e.g. "Season 1", "Season 02", "S2"
+  if (seasonFolder) {
+    const sFolderMatch = seasonFolder.match(/(?:season|s)\s*(\d+)/i);
+    if (sFolderMatch) {
+      season = parseInt(sFolderMatch[1], 10);
+    }
+  }
+
+  // Check for Year in parens or boundary, e.g. "Your Name (2016)"
   const yearMatch = raw.match(/\b(19\d\d|20\d\d)\b/);
   if (yearMatch) {
     year = parseInt(yearMatch[1], 10);
   }
 
-  // Check for SxxExx or Sxx.Exx
+  // Check for SxxExx or Sxx.Exx in filename
   const seMatch = clean.match(/s(\d+)[\.\s_-]*e(\d+)/i);
   if (seMatch) {
     season = parseInt(seMatch[1], 10);
     episode = parseInt(seMatch[2], 10);
-    const beforeSe = clean.slice(0, seMatch.index).trim();
-    if (beforeSe) {
-      showName = beforeSe.replace(/[\._\-]+/g, ' ').trim();
-    }
   } else {
-    // Check for " - 01" or " - Episode 01" or "E01"
+    // Check for " - 01" or " - Episode 01" or "E01" or standalone number at end
     const epMatch = clean.match(/[\s_\.\-]+(?:ep|episode)?\s*(\d{1,4})(?:\s*v\d)?$/i);
     if (epMatch) {
       episode = parseInt(epMatch[1], 10);
-      const beforeEp = clean.slice(0, epMatch.index).trim();
-      if (beforeEp) {
-        showName = beforeEp.replace(/[\._\-]+/g, ' ').trim();
-      }
-    } else {
-      // Fallback: use raw clean name as title
-      showName = clean.replace(/[\._\-]+/g, ' ').trim() || parentFolderName || raw;
     }
   }
 
+  const showName = seriesFolderName || clean.replace(/[\._\-]+/g, ' ').trim() || raw;
+
   // Format final readable display title
   let displayTitle = showName;
-  if (episode !== null) {
+  if (seriesFolderName && episode !== null) {
+    const epStr = String(episode).padStart(2, '0');
+    displayTitle = season > 1
+      ? `${seriesFolderName} - S${String(season).padStart(2, '0')}E${epStr}`
+      : `${seriesFolderName} - E${epStr}`;
+  } else if (episode !== null) {
     const epStr = String(episode).padStart(2, '0');
     displayTitle = `${showName} - E${epStr}`;
   } else if (year) {
     displayTitle = `${showName} (${year})`;
+  } else {
+    displayTitle = clean.replace(/[\._\-]+/g, ' ').trim() || raw;
   }
 
   return {
-    showName: showName || 'Unknown Show',
+    showName,
     displayTitle,
     season,
     episode,
@@ -97,10 +100,9 @@ export function findPosterImage(dirPath, showName) {
 
     for (const name of preferredNames) {
       for (const ext of config.ALLOWED_POSTER_EXTENSIONS) {
-        const target = `${name}${ext}`;
-        if (files.some((f) => f.toLowerCase() === target)) {
-          return files.find((f) => f.toLowerCase() === target);
-        }
+        const target = `${name}${ext}`.toLowerCase();
+        const found = files.find((f) => f.toLowerCase() === target);
+        if (found) return found;
       }
     }
 
@@ -125,14 +127,17 @@ export function findPosterImage(dirPath, showName) {
 }
 
 /**
- * Recursively scans mediaRoot directory for media files
+ * Recursively scans mediaRoot directory for media files.
+ * Groups TV and Anime series STRICTLY based on folder hierarchy.
  */
 export function scanMediaLibrary(mediaRoot) {
   const result = {
-    items: [],
-    series: [],
+    items: [],      // Standalone items (movies, single videos NOT part of any series)
+    series: [],     // TV & Anime series folders with grouped episodes
+    allItems: [],   // All video items (both standalone and series episodes)
     totalFiles: 0,
     totalSizeBytes: 0,
+    scannedAt: new Date().toISOString(),
   };
 
   const seriesMap = new Map();
@@ -179,8 +184,34 @@ export function scanMediaLibrary(mediaRoot) {
           }
         }
 
-        const parentFolder = parts.length > 2 ? parts[parts.length - 2] : (parts.length === 2 ? parts[0] : '');
-        const meta = parseMediaInfo(entry.name, parentFolder);
+        // Folder-based Series determination:
+        // When category is anime or tv, the folder directly under the category is the series folder!
+        // E.g., "anime/Sousou no Frieren/..." -> Series is "Sousou no Frieren"
+        // E.g., "tv/Shogun/Season 1/..." -> Series is "Shogun" (with season folder "Season 1")
+        let seriesFolderName = null;
+        let seriesRelPath = null;
+        let seriesFullPath = null;
+        let seasonFolder = '';
+
+        if (category === 'anime' || category === 'tv') {
+          if (parts.length > 2) {
+            // File is inside a subfolder under category
+            seriesFolderName = parts[1];
+            seriesRelPath = path.posix.join(parts[0], parts[1]);
+            seriesFullPath = path.join(mediaRoot, parts[0], parts[1]);
+
+            if (parts.length > 3) {
+              seasonFolder = parts[2];
+            }
+          }
+        } else if (category !== 'movies' && parts.length > 2) {
+          // Mixed library: if file is in a folder, group by that folder
+          seriesFolderName = parts[parts.length - 2];
+          seriesRelPath = parts.slice(0, parts.length - 1).join('/');
+          seriesFullPath = path.join(mediaRoot, seriesRelPath);
+        }
+
+        const meta = parseMediaInfo(entry.name, seriesFolderName, seasonFolder);
         const externalSubs = findExternalSubtitles(fullPath, relPath);
 
         // Poster detection: check directory poster for show/series
@@ -224,19 +255,29 @@ export function scanMediaLibrary(mediaRoot) {
           subtitles: externalSubs,
         };
 
-        result.items.push(mediaItem);
         result.totalFiles += 1;
         result.totalSizeBytes += stat.size;
+        result.allItems.push(mediaItem);
 
-        // Group into Series if Anime or TV Show
-        if (category === 'anime' || category === 'tv') {
-          const seriesKey = `${category}::${meta.showName.toLowerCase()}`;
+        // Group into Series if it belongs to a series folder
+        if (seriesFolderName) {
+          const seriesKey = `${category}::${seriesFolderName.toLowerCase()}`;
           if (!seriesMap.has(seriesKey)) {
+            // Find poster in the series root folder
+            const seriesPosterFile = findPosterImage(seriesFullPath, seriesFolderName);
+            let seriesPosterUrl = null;
+            if (seriesPosterFile) {
+              const relSeriesPoster = path.posix.join(seriesRelPath, seriesPosterFile);
+              seriesPosterUrl = `/api/poster?path=${encodeURIComponent(relSeriesPoster)}`;
+            }
+
             seriesMap.set(seriesKey, {
               id: Buffer.from(seriesKey).toString('base64url'),
               category,
-              title: meta.showName,
-              posterUrl: dirPosterUrl || thumbnailUrl,
+              title: seriesFolderName,
+              folderName: seriesFolderName,
+              relativePath: seriesRelPath,
+              posterUrl: seriesPosterUrl || dirPosterUrl || thumbnailUrl,
               totalEpisodes: 0,
               totalSizeBytes: 0,
               totalSizeFormatted: '0 B',
@@ -249,13 +290,20 @@ export function scanMediaLibrary(mediaRoot) {
           s.totalEpisodes += 1;
           s.totalSizeBytes += stat.size;
           s.totalSizeFormatted = formatBytes(s.totalSizeBytes);
-          if (dirPosterUrl && !s.posterUrl) {
-            s.posterUrl = dirPosterUrl;
-          }
           if (new Date(stat.mtime) > new Date(s.latestModified)) {
             s.latestModified = stat.mtime.toISOString();
           }
+
+          mediaItem.seriesId = s.id;
+          mediaItem.seriesTitle = s.title;
+          mediaItem.isEpisode = true;
           s.episodes.push(mediaItem);
+        } else {
+          // Standalone Movie or Single Video
+          mediaItem.seriesId = null;
+          mediaItem.seriesTitle = null;
+          mediaItem.isEpisode = false;
+          result.items.push(mediaItem);
         }
       }
     }
@@ -263,7 +311,7 @@ export function scanMediaLibrary(mediaRoot) {
 
   traverse(mediaRoot);
 
-  // Sort episodes within each series
+  // Sort episodes within each series by Season and Episode number
   for (const s of seriesMap.values()) {
     s.episodes.sort((a, b) => {
       if (a.season !== b.season) return a.season - b.season;
@@ -273,10 +321,10 @@ export function scanMediaLibrary(mediaRoot) {
     result.series.push(s);
   }
 
-  // Sort overall series by title or latest activity
+  // Sort overall series by latest activity
   result.series.sort((a, b) => b.latestModified.localeCompare(a.latestModified));
 
-  // Sort raw items by modified time descending (newest first)
+  // Sort standalone items by modified time descending
   result.items.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
 
   return result;
