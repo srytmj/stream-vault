@@ -189,9 +189,6 @@ export default function VideoPlayer({
       ],
       customType: {
         mkv: function (video, url) { video.src = url; },
-        webm: function (video, url) { video.src = url; },
-        mp4: function (video, url) { video.src = url; },
-        m4v: function (video, url) { video.src = url; },
         avi: function (video, url) { video.src = url; },
         mov: function (video, url) { video.src = url; },
       },
@@ -457,6 +454,18 @@ export default function VideoPlayer({
                 <ExternalLink className="w-4 h-4" />
                 <span>Open in VLC / Infuse</span>
               </button>
+              <button
+                onClick={() => {
+                  const remuxUrl = appendAuthToken(`/api/stream/remux?path=${encodeURIComponent(mediaItem.relativePath)}`);
+                  artRef?.current?.switchUrl(remuxUrl);
+                  setVideoError(null);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold transition shadow-lg shadow-fuchsia-600/30"
+              >
+                <Layers className="w-4 h-4" />
+                <span>Fix Audio (Web Remux)</span>
+              </button>
+
               <button
                 onClick={copyDirectStreamLink}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-vault-800 hover:bg-vault-700 text-white text-xs font-semibold border border-white/10 transition"
