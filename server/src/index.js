@@ -74,13 +74,48 @@ let cachedLibrary = null;
 let lastScanTime = 0;
 const CACHE_TTL_MS = 60 * 1000; // 1 minute auto refresh
 
+import { loadLibraries as getOrLoadLibraries } from './libraries.js';
+
 function getMediaLibrary(forceRefresh = false) {
   const now = Date.now();
   if (forceRefresh || !cachedLibrary || now - lastScanTime > CACHE_TTL_MS) {
-    cachedLibrary = scanMediaLibrary(config.MEDIA_ROOT);
+    const libs = getOrLoadLibraries();
+    
+    let merged = { items: [], series: [], allItems: [], totalFiles: 0, totalSizeBytes: 0, scannedAt: new Date().toISOString() };
+    
+    const baseScan = scanMediaLibrary(config.MEDIA_ROOT);
+    mergeScans(merged, baseScan);
+    
+    for (const l of libs) {
+      if (l.path !== config.MEDIA_ROOT) {
+         try {
+           mergeScans(merged, scanMediaLibrary(l.path));
+         } catch(e) {}
+      }
+    }
+    
+    merged.series.sort((a,b) => b.latestModified.localeCompare(a.latestModified));
+    merged.items.sort((a,b) => b.modifiedAt.localeCompare(a.modifiedAt));
+    
+    cachedLibrary = merged;
     lastScanTime = now;
+    
+    // Trigger background thumbnails for all aggregated items
+    setTimeout(() => {
+       import('./scanner.js').then(m => {
+          if (m.preGenerateThumbnails) m.preGenerateThumbnails(merged.allItems);
+       });
+    }, 5000);
   }
   return cachedLibrary;
+}
+
+function mergeScans(merged, scanObj) {
+  merged.items.push(...scanObj.items);
+  merged.series.push(...scanObj.series);
+  merged.allItems.push(...scanObj.allItems);
+  merged.totalFiles += scanObj.totalFiles;
+  merged.totalSizeBytes += scanObj.totalSizeBytes;
 }
 
 // ==========================================
@@ -243,7 +278,8 @@ app.get('/api/media', async (req) => {
 });
 
 app.post('/api/media/scan', async () => {
-  cachedLibrary = scanMediaLibrary(config.MEDIA_ROOT);
+  getMediaLibrary(true);
+  // cachedLibrary is handled by getMediaLibrary(true);
   lastScanTime = Date.now();
   return {
     success: true,

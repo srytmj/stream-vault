@@ -2,7 +2,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { config } from './config.js';
 import { findExternalSubtitles } from './subtitles.js';
-import { findExactCompanionPoster } from './thumbnails.js';
+import { findExactCompanionPoster, getOrGenerateVideoThumbnail } from './thumbnails.js';
+import { ffmpegQueue } from './processQueue.js';
 
 /**
  * Format bytes to readable string (e.g., 1.45 GB)
@@ -239,6 +240,8 @@ export function scanMediaLibrary(mediaRoot) {
           id: Buffer.from(relPath).toString('base64url'),
           filename: entry.name,
           relativePath: relPath,
+          absolutePath: fullPath,
+          absolutePath: fullPath,
           streamUrl: `/api/stream?path=${encodeURIComponent(relPath)}`,
           category,
           title: meta.displayTitle,
@@ -327,5 +330,38 @@ export function scanMediaLibrary(mediaRoot) {
   // Sort standalone items by modified time descending
   result.items.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
 
+  // Start background thumbnail generation so users don't wait when entering folders
+  setTimeout(() => preGenerateThumbnails(result.allItems), 5000);
+
   return result;
 }
+
+let isBgGeneratorRunning = false;
+export async function preGenerateThumbnails(allItems) {
+  if (isBgGeneratorRunning) return;
+  isBgGeneratorRunning = true;
+  console.log(`[Background] Starting pre-generation of ${allItems.length} thumbnails...`);
+  
+  try {
+    for (const item of allItems) {
+      if (!item.absolutePath) continue;
+      
+      // Throttle if the system queue is already busy with user requests
+      while (ffmpegQueue.queue.length > 10) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      
+      try {
+        // Enqueue generation
+        await getOrGenerateVideoThumbnail(item.absolutePath).catch(() => {});
+      } catch (err) {}
+      
+      // tiny sleep to let event loop breathe and allow user requests to jump the queue
+      await new Promise(r => setTimeout(r, 200)); 
+    }
+    console.log('[Background] Thumbnail pre-generation completed.');
+  } finally {
+    isBgGeneratorRunning = false;
+  }
+}
+
