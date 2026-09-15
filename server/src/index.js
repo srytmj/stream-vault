@@ -449,8 +449,10 @@ app.post('/api/folders/thumbnail', async (req, reply) => {
 // ==========================================
 // 7. HTTP Range Video Streaming (Zero Transcode)
 // ==========================================
-app.get('/api/stream', async (req, reply) => {
-  return handleByteRangeStream(req, reply);
+app.route({
+  method: ['GET', 'HEAD'],
+  url: '/api/stream',
+  handler: async (req, reply) => handleByteRangeStream(req, reply),
 });
 
 // ==========================================

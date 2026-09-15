@@ -10,6 +10,17 @@ export function getWatchHistory() {
   }
 }
 
+export function getWatchHistoryList() {
+  try {
+    const history = getWatchHistory();
+    return Object.values(history)
+      .filter((item) => !item.completed && item.progress > 1 && item.progress < 95)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  } catch {
+    return [];
+  }
+}
+
 export function saveWatchProgress(item, currentTime, duration) {
   if (!item || !duration || isNaN(currentTime)) return;
   try {
@@ -26,6 +37,10 @@ export function saveWatchProgress(item, currentTime, duration) {
       relativePath: item.relativePath,
       category: item.category,
       posterUrl: item.posterUrl,
+      thumbnailUrl: item.thumbnailUrl,
+      streamUrl: item.streamUrl,
+      extension: item.extension,
+      sizeFormatted: item.sizeFormatted,
       currentTime: Math.floor(currentTime),
       duration: Math.floor(duration),
       progress,
@@ -51,16 +66,20 @@ export function removeWatchHistory(itemId) {
     const history = getWatchHistory();
     delete history[itemId];
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    return getWatchHistoryList();
   } catch (err) {
     console.error('Failed to remove history item:', err);
+    return [];
   }
 }
 
 export function clearAllHistory() {
   try {
     localStorage.removeItem(HISTORY_KEY);
+    return [];
   } catch (err) {
     console.error('Failed to clear history:', err);
+    return [];
   }
 }
 

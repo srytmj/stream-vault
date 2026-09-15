@@ -11,6 +11,7 @@ import {
   Key,
   Shield,
   Activity,
+  Home as HomeIcon,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -19,7 +20,7 @@ export default function Navbar({
   setSearchQuery,
   selectedCategory,
   setSelectedCategory,
-  activeTab = 'catalog',
+  activeTab = 'home',
   setActiveTab,
   onOpenAddLibrary,
   serverHealth,
@@ -59,6 +60,13 @@ export default function Navbar({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const handleSearchChange = (val) => {
+    setSearchQuery(val);
+    if (val.trim() && activeTab !== 'catalog') {
+      setActiveTab?.('catalog');
+    }
+  };
+
   return (
     <header
       className={`fixed top-0 w-full z-50 transition-all duration-300 ${
@@ -72,7 +80,7 @@ export default function Navbar({
         <div className="flex items-center gap-4 sm:gap-8 md:gap-10">
           {/* Brand Logo */}
           <button
-            onClick={() => setActiveTab?.('catalog')}
+            onClick={() => setActiveTab?.('home')}
             className="flex items-center gap-2.5 group shrink-0 focus:outline-none text-left"
           >
             <div className="w-8 h-8 md:w-9 md:h-9 bg-vault-accent rounded-xl flex items-center justify-center shadow-lg shadow-vault-accent/30 group-hover:scale-105 transition-transform">
@@ -85,6 +93,16 @@ export default function Navbar({
 
           {/* Primary Nav Links (Desktop & Tablet) */}
           <nav className="flex items-center gap-1 sm:gap-2 bg-white/5 p-1 rounded-xl border border-white/10 text-xs font-semibold">
+            <button
+              onClick={() => setActiveTab?.('home')}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                activeTab === 'home'
+                  ? 'bg-vault-accent text-white shadow-sm'
+                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              Home
+            </button>
             <button
               onClick={() => setActiveTab?.('catalog')}
               className={`px-3 py-1.5 rounded-lg transition-all ${
@@ -140,15 +158,15 @@ export default function Navbar({
             </button>
           )}
 
-          {/* Search Bar */}
-          {activeTab === 'catalog' && (
+          {/* Search Bar (Available on Home and Catalog) */}
+          {activeTab !== 'explorer' && (
             <div className="relative group max-w-[170px] sm:max-w-xs w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-white transition-colors" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full bg-black/40 border border-white/15 focus:border-vault-accent/60 focus:bg-black/60 rounded-xl py-1.5 pl-8 pr-3 text-xs text-white placeholder-slate-400 focus:outline-none transition-all"
               />
             </div>

@@ -18,21 +18,52 @@ export function resolveSafePath(relativeFilePath, root = config.MEDIA_ROOT) {
 }
 
 /**
- * Resolve correct MIME type for client-side HTML5 player playback
+ * Resolve correct MIME type for client-side HTML5 player playback.
+ * Inspects initial magic bytes to handle files that may have .mkv extension but MP4 container,
+ * or true Matroska / WebM EBML containers.
  */
 export function getMediaMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  
-  if (ext === '.mkv') {
-    // Note: video/mp4 or video/webm enables native Chromium Matroska hardware decoding
+
+  try {
+    const fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(16);
+    const bytesRead = fs.readSync(fd, buf, 0, 16, 0);
+    fs.closeSync(fd);
+
+    if (bytesRead >= 8) {
+      // Check for ISO BMFF / MP4 container (bytes 4..7 === 'ftyp')
+      if (buf.toString('utf8', 4, 8) === 'ftyp') {
+        return 'video/mp4';
+      }
+      // Check for EBML container (Matroska / WebM: 0x1A 0x45 0xDF 0xA3)
+      if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
+        return ext === '.webm' ? 'video/webm' : 'video/x-matroska';
+      }
+    }
+  } catch {
+    // Fall back to extension-based lookup
+  }
+
+  if (ext === '.mp4' || ext === '.m4v') {
     return 'video/mp4';
   }
-  
+  if (ext === '.webm') {
+    return 'video/webm';
+  }
+  if (ext === '.mkv') {
+    return 'video/x-matroska';
+  }
+  if (ext === '.mov') {
+    return 'video/quicktime';
+  }
+
   return mime.lookup(filePath) || 'video/mp4';
 }
 
 /**
  * Ultra-efficient Zero Server-Side Transcode HTTP 206 Partial Content Streamer
+ * Supports both GET and HEAD requests, with full RFC 7233 byte range semantics.
  */
 export async function handleByteRangeStream(req, reply) {
   const queryPath = req.query.path;
@@ -61,8 +92,9 @@ export async function handleByteRangeStream(req, reply) {
   const fileSize = stat.size;
   const range = req.headers.range;
   const contentType = getMediaMimeType(fullPath);
+  const isHead = req.method === 'HEAD';
 
-  // If no range header is present, serve full file (HTTP 200)
+  // If no range header is present, serve full file headers (HTTP 200)
   if (!range) {
     reply.code(200);
     reply.header('Content-Length', fileSize);
@@ -70,6 +102,10 @@ export async function handleByteRangeStream(req, reply) {
     reply.header('Accept-Ranges', 'bytes');
     reply.header('Cache-Control', 'no-cache');
     reply.header('Access-Control-Allow-Origin', '*');
+
+    if (isHead) {
+      return reply.send();
+    }
 
     const stream = fs.createReadStream(fullPath);
     return reply.send(stream);
@@ -98,7 +134,7 @@ export async function handleByteRangeStream(req, reply) {
   }
 
   // Fast chunk seeking: allow client to request whatever chunk size it needs
-  const chunkSize = (end - start) + 1;
+  const chunkSize = end - start + 1;
 
   reply.code(206);
   reply.header('Content-Range', `bytes ${start}-${end}/${fileSize}`);
@@ -107,6 +143,10 @@ export async function handleByteRangeStream(req, reply) {
   reply.header('Content-Type', contentType);
   reply.header('Cache-Control', 'no-cache');
   reply.header('Access-Control-Allow-Origin', '*');
+
+  if (isHead) {
+    return reply.send();
+  }
 
   const stream = fs.createReadStream(fullPath, { start, end });
   return reply.send(stream);

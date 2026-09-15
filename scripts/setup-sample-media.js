@@ -150,7 +150,7 @@ async function run() {
         generateSvgPoster('Sousou no Frieren', 'Frieren: Beyond Journey\'s End', 'Anime', '#1e1b4b', '#0f172a', '#38bdf8')
       );
 
-      for (let ep = 1; ep <= 3; ep++) {
+      for (let ep = 1; ep <= 4; ep++) {
         const epStr = String(ep).padStart(2, '0');
         const baseName = `[SubsPlease] Sousou no Frieren - ${epStr} (1080p)`;
         fs.writeFileSync(path.join(frierenDir, `${baseName}.mkv`), videoBuffer);
@@ -229,8 +229,7 @@ async function run() {
       }
 
       console.log(`Successfully populated media library at ${base}`);
-    } catch (err) {
-      console.warn(`Could not setup media at ${base}:`, err.message);
+    } catch (err) {\n      console.warn(`Could not setup media at ${base}:`, err.message);
     }
   }
 }

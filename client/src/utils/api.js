@@ -1,14 +1,33 @@
 const TOKEN_KEY = 'sv_token';
 
 export function getStoredToken() {
-  return localStorage.getItem(TOKEN_KEY) || null;
+  const local = localStorage.getItem(TOKEN_KEY);
+  if (local) return local;
+
+  // Fallback to cookie check if localStorage is empty
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)sv_token=([^;]+)/);
+    if (match) {
+      const decoded = decodeURIComponent(match[1]);
+      localStorage.setItem(TOKEN_KEY, decoded);
+      return decoded;
+    }
+  } catch {}
+
+  return null;
 }
 
 export function setStoredToken(token) {
   if (token) {
     localStorage.setItem(TOKEN_KEY, token);
+    try {
+      document.cookie = `sv_token=${encodeURIComponent(token)}; path=/; max-age=604800; SameSite=Lax`;
+    } catch {}
   } else {
     localStorage.removeItem(TOKEN_KEY);
+    try {
+      document.cookie = 'sv_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
+    } catch {}
   }
 }
 

@@ -1,28 +1,24 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Sparkles,
-  Film,
-  Tv,
-  Folder,
   FolderTree,
   FolderPlus,
-  Trash2,
-  HardDrive,
-  Layers,
-  Clock,
   Loader2,
   AlertCircle,
-  Play,
-  Check,
+  Film,
+  Sparkles,
+  Tv,
+  Folder,
+  Trash2,
   Home,
   Activity,
-  User,
+  Layers,
 } from 'lucide-react';
 import Navbar from './components/Navbar';
 import MediaGrid from './components/MediaGrid';
 import VideoPlayer from './components/VideoPlayer';
 import SeriesModal from './components/SeriesModal';
 import ContinueWatching from './components/ContinueWatching';
+import JellyfinHome from './components/JellyfinHome';
 import StatsModal from './components/StatsModal';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import AddLibraryModal from './components/AddLibraryModal';
@@ -37,13 +33,17 @@ import {
   fetchLibraries,
   removeLibrary,
 } from './utils/api';
-import { getWatchHistory } from './utils/storage';
+import {
+  getWatchHistoryList,
+  removeWatchHistory,
+  clearAllHistory,
+} from './utils/storage';
 
 // Helper: Parse URL parameters into structured state
 function parseRouteParams() {
   const params = new URLSearchParams(window.location.search);
   return {
-    tab: params.get('tab') || 'catalog',
+    tab: params.get('tab') || 'home',
     category: params.get('cat') || 'all',
     libraryId: params.get('lib') || null,
     subpath: params.get('path') || '',
@@ -74,8 +74,8 @@ export default function App() {
   const [libraries, setLibraries] = useState([]);
   const [serverHealth, setServerHealth] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // App Navigation & View Modes initialized from URL
   const initialRoute = useRef(parseRouteParams());
@@ -115,7 +115,7 @@ export default function App() {
     const next = { ...current, ...partialState };
 
     const params = new URLSearchParams();
-    if (next.tab && next.tab !== 'catalog') params.set('tab', next.tab);
+    if (next.tab && next.tab !== 'home') params.set('tab', next.tab);
     if (next.category && next.category !== 'all') params.set('cat', next.category);
     if (next.libraryId) params.set('lib', next.libraryId);
     if (next.subpath) params.set('path', next.subpath);
@@ -163,8 +163,8 @@ export default function App() {
 
       // Match Series Modal
       if (route.seriesId) {
-        const s = libraryDataRef.current.series?.find((sr) => sr.id === route.seriesId);
-        if (s) setActiveSeriesModal(s);
+        const series = libraryDataRef.current.series?.find((s) => s.id === route.seriesId);
+        if (series) setActiveSeriesModal(series);
       } else {
         setActiveSeriesModal(null);
       }
@@ -174,9 +174,18 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Close open modals on Escape key
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        return;
+      }
+
+      if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setShowShortcutsModal((prev) => !prev);
+      }
+
       if (e.key === 'Escape') {
         if (showStatsModal) setShowStatsModal(false);
         if (showShortcutsModal) setShowShortcutsModal(false);
@@ -206,7 +215,7 @@ export default function App() {
       setLibraryData(mediaRes);
       setServerHealth(healthRes);
       setLibraries(libsRes);
-      setWatchHistory(getWatchHistory());
+      setWatchHistory(getWatchHistoryList());
 
       // Resolve deep-linked items from initial URL route
       const initial = initialRoute.current;
@@ -261,7 +270,10 @@ export default function App() {
   // Tab & Navigation Handlers with URL history sync
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === 'catalog') {
+    if (tab === 'home') {
+      setActiveLibrary(null);
+      syncToUrl({ tab: null, libraryId: null, subpath: null });
+    } else if (tab === 'catalog') {
       setActiveLibrary(null);
       syncToUrl({ tab: 'catalog', libraryId: null, subpath: null });
     } else {
@@ -271,7 +283,10 @@ export default function App() {
 
   const handleCategoryChange = (cat) => {
     setSelectedCategory(cat);
-    syncToUrl({ category: cat });
+    if (activeTab !== 'catalog') {
+      setActiveTab('catalog');
+    }
+    syncToUrl({ tab: 'catalog', category: cat });
   };
 
   const handleSearchChange = (query) => {
@@ -280,9 +295,16 @@ export default function App() {
   };
 
   const handleSelectLibrary = (lib) => {
-    setActiveLibrary(lib);
-    setExplorerSubpath('');
-    syncToUrl({ tab: 'explorer', libraryId: lib.id, subpath: null });
+    if (['anime', 'movies', 'tv'].includes(lib.type?.toLowerCase())) {
+      setSelectedCategory(lib.type.toLowerCase());
+      setActiveTab('catalog');
+      syncToUrl({ tab: 'catalog', category: lib.type.toLowerCase(), libraryId: null, subpath: null });
+    } else {
+      setActiveLibrary(lib);
+      setExplorerSubpath('');
+      setActiveTab('explorer');
+      syncToUrl({ tab: 'explorer', libraryId: lib.id, subpath: null });
+    }
   };
 
   const handleBackToLibraries = () => {
@@ -303,12 +325,22 @@ export default function App() {
 
   const handleBackFromPlayer = () => {
     setCurrentVideo(null);
-    setWatchHistory(getWatchHistory());
+    setWatchHistory(getWatchHistoryList());
     if (window.history.state?.sv) {
       window.history.back();
     } else {
       syncToUrl({ watchId: null }, true);
     }
+  };
+
+  const handleRemoveHistory = (id) => {
+    removeWatchHistory(id);
+    setWatchHistory(getWatchHistoryList());
+  };
+
+  const handleClearHistory = () => {
+    clearAllHistory();
+    setWatchHistory([]);
   };
 
   const handleViewSeries = (series) => {
@@ -345,8 +377,8 @@ export default function App() {
   const getEpisodeNavigation = () => {
     if (!currentVideo) return { next: null, prev: null, episodes: [] };
 
-    const foundSeries = libraryData.series.find((s) =>
-      s.episodes.some((ep) => ep.id === currentVideo.id)
+    const foundSeries = libraryData.series?.find((s) =>
+      s.episodes?.some((ep) => ep.id === currentVideo.id)
     );
 
     if (foundSeries) {
@@ -450,6 +482,23 @@ export default function App() {
           </div>
         )}
 
+        {/* ================= TAB 0: JELLYFIN HOME VIEW ================= */}
+        {!loading && !error && activeTab === 'home' && (
+          <JellyfinHome
+            libraries={libraries}
+            mediaItems={libraryData.items}
+            seriesList={libraryData.series}
+            watchHistory={watchHistory}
+            onPlayMedia={handlePlayMedia}
+            onViewSeries={handleViewSeries}
+            onSelectLibrary={handleSelectLibrary}
+            onNavigateToCatalog={() => handleTabChange('catalog')}
+            onNavigateToFolders={() => handleTabChange('explorer')}
+            onOpenAddLibrary={() => setShowAddLibraryModal(true)}
+            onRemoveHistory={handleRemoveHistory}
+          />
+        )}
+
         {/* ================= TAB 1: CATALOG VIEW ================= */}
         {!loading && !error && activeTab === 'catalog' && (
           <>
@@ -458,7 +507,7 @@ export default function App() {
               <ContinueWatching
                 historyItems={watchHistory}
                 onPlayMedia={handlePlayMedia}
-                onClearHistory={() => setWatchHistory([])}
+                onRemove={handleRemoveHistory}
               />
             )}
 
@@ -581,13 +630,23 @@ export default function App() {
       {/* Mobile Bottom Navigation Bar (Jellyfin Style) */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-vault-950/95 backdrop-blur-md border-t border-white/10 flex md:hidden items-center justify-around py-2 px-2">
         <button
+          onClick={() => handleTabChange('home')}
+          className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition ${
+            activeTab === 'home' ? 'text-vault-accent font-semibold' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Home className="w-5 h-5" />
+          <span className="text-[10px]">Home</span>
+        </button>
+
+        <button
           onClick={() => handleTabChange('catalog')}
           className={`flex flex-col items-center gap-1 py-1 px-4 rounded-xl transition ${
             activeTab === 'catalog' ? 'text-vault-accent font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <Home className="w-5 h-5" />
-          <span className="text-[10px]">Home</span>
+          <Layers className="w-5 h-5" />
+          <span className="text-[10px]">Catalog</span>
         </button>
 
         <button
@@ -639,19 +698,22 @@ export default function App() {
         onClose={() => setShowChangePasswordModal(false)}
       />
 
-      {/* Architecture & Performance Stats Modal */}
-      <StatsModal
-        isOpen={showStatsModal}
-        onClose={() => setShowStatsModal(false)}
-        serverHealth={serverHealth}
-        mediaStats={libraryData}
-      />
+      {/* Diagnostics / Stats Modal */}
+      {showStatsModal && (
+        <StatsModal
+          stats={serverHealth}
+          isOpen={showStatsModal}
+          onClose={() => setShowStatsModal(false)}
+        />
+      )}
 
-      {/* Keyboard Shortcuts Cheat Sheet Modal */}
-      <KeyboardShortcutsModal
-        isOpen={showShortcutsModal}
-        onClose={() => setShowShortcutsModal(false)}
-      />
+      {/* Keyboard Shortcuts Helper */}
+      {showShortcutsModal && (
+        <KeyboardShortcutsModal
+          isOpen={showShortcutsModal}
+          onClose={() => setShowShortcutsModal(false)}
+        />
+      )}
     </div>
   );
 }
